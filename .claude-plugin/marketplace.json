@@ -1,19 +1,19 @@
 {
-  "name": "openai-codex",
+  "name": "codex-unbounded",
   "owner": {
-    "name": "OpenAI"
+    "name": "Yigit Konur"
   },
   "metadata": {
-    "description": "Codex plugins to use in Claude Code for delegation and code review.",
-    "version": "1.0.4"
+    "description": "Unbounded fork of OpenAI's Codex plugins for Claude Code: all review-context, wait, retention, and display caps lifted.",
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "codex",
-      "description": "Use Codex from Claude Code to review code or delegate tasks.",
-      "version": "1.0.4",
+      "description": "Use Codex from Claude Code to review code or delegate tasks (unbounded fork: review/timeout/retention caps lifted).",
+      "version": "1.1.0",
       "author": {
-        "name": "OpenAI"
+        "name": "Yigit Konur"
       },
       "source": "./plugins/codex"
     }

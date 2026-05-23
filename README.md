@@ -5,6 +5,19 @@ Use Codex from inside Claude Code for code reviews or to delegate tasks to Codex
 This plugin is for Claude Code users who want an easy way to start using Codex from the workflow
 they already have.
 
+> [!NOTE]
+> **Unbounded fork.** This is a fork of [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc)
+> with every runtime boundary lifted. Codex already ran with no sandbox, no approval gating, and no
+> execution timeout upstream; this fork additionally removes the remaining caps:
+>
+> - **Review context** — the full diff is always inlined (no 2-file / 256 KB / 24 KB truncation), so Codex reviews never fall back to the lightweight "self-collect" summary.
+> - **`status --wait`** — waits until the job finishes instead of giving up after 4 minutes (an explicit `--timeout-ms` still wins).
+> - **Stop-gate review** — runs up to 24h instead of 15 minutes.
+> - **Job retention** — full job history is kept (no 50-job pruning).
+> - **`status` display** — every tracked job and all progress lines are shown.
+>
+> The delegation/task path (`/codex:rescue`) is unchanged in behavior — it was already unbounded.
+
 <video src="./docs/plugin-demo.webm" controls muted playsinline autoplay></video>
 
 ## What You Get
@@ -24,14 +37,20 @@ they already have.
 Add the marketplace in Claude Code:
 
 ```bash
-/plugin marketplace add openai/codex-plugin-cc
+/plugin marketplace add yigitkonur/codex-plugin-cc
 ```
 
 Install the plugin:
 
 ```bash
-/plugin install codex@openai-codex
+/plugin install codex@codex-unbounded
 ```
+
+> [!IMPORTANT]
+> This fork ships the same plugin name (`codex`) so all `/codex:*` commands and the
+> `codex:codex-rescue` subagent keep working. If you already have the official
+> `codex@openai-codex` plugin installed, uninstall it first to avoid a duplicate
+> `codex` plugin name: `/plugin uninstall codex@openai-codex`.
 
 Reload plugins:
 
