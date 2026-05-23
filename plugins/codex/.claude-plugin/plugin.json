@@ -1,6 +1,6 @@
 {
   "name": "codex",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Use Codex from Claude Code to review code or delegate tasks (unbounded fork: review/timeout/retention caps lifted).",
   "author": {
     "name": "Yigit Konur"
