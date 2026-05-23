@@ -1010,6 +1010,10 @@ export async function runAppServerTurn(cwd, options = {}) {
           input: buildTurnInput(prompt),
           model: options.model ?? null,
           effort: options.effort ?? null,
+          // Unbounded fork: pin full access per turn too. The app-server can run
+          // tool commands in a read-only sandbox even when the thread is
+          // full-access unless the turn also sets it (openai/codex#14068).
+          sandboxPolicy: { type: "dangerFullAccess" },
           outputSchema: options.outputSchema ?? null
         }),
       { onProgress: options.onProgress }

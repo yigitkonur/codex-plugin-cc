@@ -197,7 +197,12 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
         "app-server",
         "-c", 'web_search="live"',
         "-c", "check_for_update_on_startup=false",
-        "-c", "notice.hide_full_access_warning=true"
+        "-c", "notice.hide_full_access_warning=true",
+        // Fluidity: fewer truncated tool outputs, longer background commands,
+        // and richer web-search context.
+        "-c", "tool_output_token_limit=32000",
+        "-c", "background_terminal_max_timeout=900000",
+        "-c", 'tools.web_search.context_size="high"'
       ],
       {
         cwd: this.cwd,

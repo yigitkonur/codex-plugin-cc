@@ -10,9 +10,10 @@ they already have.
 > with every runtime boundary lifted. The behavior is baked into the plugin, so it is the same
 > regardless of your `~/.codex/config.toml`:
 >
-> - **Always-allow / full access** — every Codex thread (task *and* review) runs with `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`: no approval prompts, full filesystem, full network. Upstream ran reviews read-only and rescue tasks workspace-write (no network).
+> - **Always-allow / full access** — every Codex thread (task *and* review) runs with `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`, pinned both per-thread and per-turn (`sandboxPolicy: dangerFullAccess`, guarding against [openai/codex#14068](https://github.com/openai/codex/issues/14068)): no approval prompts, full filesystem, full network. Upstream ran reviews read-only and rescue tasks workspace-write (no network).
 > - **Reasoning effort** — defaults to `high` (pass `--effort` to override).
-> - **Live web search** — the app-server is started with `web_search = "live"`, update checks off, and the full-access warning suppressed.
+> - **Live web search** — the app-server is started with `web_search = "live"`, `tools.web_search.context_size = "high"`, update checks off, and the full-access warning suppressed.
+> - **Runtime fluidity** — tool output up to `32k` tokens (less truncation) and background commands up to 15 min (`background_terminal_max_timeout`).
 > - **Review context** — the full diff is always inlined (no 2-file / 256 KB / 24 KB truncation), so reviews never fall back to the lightweight "self-collect" summary.
 > - **`status --wait`** — waits until the job finishes instead of giving up after 4 minutes (an explicit `--timeout-ms` still wins).
 > - **Stop-gate review** — runs up to 24h instead of 15 minutes.
