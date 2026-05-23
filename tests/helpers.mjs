@@ -13,9 +13,17 @@ export function writeExecutable(filePath, source) {
 }
 
 export function run(command, args, options = {}) {
+  let env = options.env;
+  if (!env) {
+    // Hermetic: when a test does not set its own env, don't let a
+    // CODEX_COMPANION_SESSION_ID leaked from the caller's shell make
+    // session-scoped commands (status/result) filter out the test's jobs.
+    env = { ...process.env };
+    delete env.CODEX_COMPANION_SESSION_ID;
+  }
   return spawnSync(command, args, {
     cwd: options.cwd,
-    env: options.env,
+    env,
     encoding: "utf8",
     input: options.input,
     shell: process.platform === "win32" && !path.isAbsolute(command),
