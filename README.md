@@ -7,16 +7,17 @@ they already have.
 
 > [!NOTE]
 > **Unbounded fork.** This is a fork of [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc)
-> with every runtime boundary lifted. Codex already ran with no sandbox, no approval gating, and no
-> execution timeout upstream; this fork additionally removes the remaining caps:
+> with every runtime boundary lifted. The behavior is baked into the plugin, so it is the same
+> regardless of your `~/.codex/config.toml`:
 >
-> - **Review context** — the full diff is always inlined (no 2-file / 256 KB / 24 KB truncation), so Codex reviews never fall back to the lightweight "self-collect" summary.
+> - **Always-allow / full access** — every Codex thread (task *and* review) runs with `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`: no approval prompts, full filesystem, full network. Upstream ran reviews read-only and rescue tasks workspace-write (no network).
+> - **Reasoning effort** — defaults to `high` (pass `--effort` to override).
+> - **Live web search** — the app-server is started with `web_search = "live"`, update checks off, and the full-access warning suppressed.
+> - **Review context** — the full diff is always inlined (no 2-file / 256 KB / 24 KB truncation), so reviews never fall back to the lightweight "self-collect" summary.
 > - **`status --wait`** — waits until the job finishes instead of giving up after 4 minutes (an explicit `--timeout-ms` still wins).
 > - **Stop-gate review** — runs up to 24h instead of 15 minutes.
 > - **Job retention** — full job history is kept (no 50-job pruning).
 > - **`status` display** — every tracked job and all progress lines are shown.
->
-> The delegation/task path (`/codex:rescue`) is unchanged in behavior — it was already unbounded.
 
 <video src="./docs/plugin-demo.webm" controls muted playsinline autoplay></video>
 
@@ -177,7 +178,7 @@ Ask Codex to redesign the database connection to be more resilient.
 
 **Notes:**
 
-- if you do not pass `--model` or `--effort`, Codex chooses its own defaults.
+- if you do not pass `--model`, Codex chooses its own default; this fork defaults reasoning effort to `high` unless you pass `--effort`.
 - if you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`
 - follow-up rescue requests can continue the latest Codex task in the repo
 
