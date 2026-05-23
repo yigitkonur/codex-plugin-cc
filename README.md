@@ -24,7 +24,7 @@ they already have.
 
 ## What You Get
 
-- `/codex:review` for a normal read-only Codex review
+- `/codex:review` for a Codex code review (full access in this fork, not read-only)
 - `/codex:adversarial-review` for a steerable challenge review
 - `/codex:rescue`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
 
@@ -117,7 +117,7 @@ Examples:
 /codex:review --background
 ```
 
-This command is read-only and will not perform any changes. When run in the background you can use [`/codex:status`](#codexstatus) to check on the progress and [`/codex:cancel`](#codexcancel) to cancel the ongoing task.
+Unlike upstream, this fork runs reviews with full access (`danger-full-access`), so a review **can** modify files or use the network — it is no longer read-only. When run in the background you can use [`/codex:status`](#codexstatus) to check on the progress and [`/codex:cancel`](#codexcancel) to cancel the ongoing task.
 
 ### `/codex:adversarial-review`
 
@@ -142,7 +142,7 @@ Examples:
 /codex:adversarial-review --background look for race conditions and question the chosen approach
 ```
 
-This command is read-only. It does not fix code.
+In this fork this command runs with full access and is **not** read-only — it can modify code or use the network.
 
 ### `/codex:rescue`
 
