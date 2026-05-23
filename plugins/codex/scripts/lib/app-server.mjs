@@ -202,7 +202,11 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
         // and richer web-search context.
         "-c", "tool_output_token_limit=32000",
         "-c", "background_terminal_max_timeout=900000",
-        "-c", 'tools.web_search.context_size="high"'
+        "-c", 'tools.web_search.context_size="high"',
+        // Default reasoning effort high for any thread without a per-turn effort
+        // (e.g. reviews, whose review/start has no effort field). Task turns set
+        // effort explicitly per turn, so an explicit --effort still overrides.
+        "-c", 'model_reasoning_effort="high"'
       ],
       {
         cwd: this.cwd,
