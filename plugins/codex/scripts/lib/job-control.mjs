@@ -5,8 +5,9 @@ import { getConfig, listJobs, readJobFile, resolveJobFile } from "./state.mjs";
 import { SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
-export const DEFAULT_MAX_STATUS_JOBS = 8;
-export const DEFAULT_MAX_PROGRESS_LINES = 4;
+// Unbounded fork: show every tracked job and all captured progress lines.
+export const DEFAULT_MAX_STATUS_JOBS = Number.MAX_SAFE_INTEGER;
+export const DEFAULT_MAX_PROGRESS_LINES = Number.MAX_SAFE_INTEGER;
 
 export function sortJobsNewestFirst(jobs) {
   return [...jobs].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));

@@ -40,7 +40,7 @@ test("resolveStateDir uses CLAUDE_PLUGIN_DATA when it is provided", () => {
   }
 });
 
-test("saveState prunes dropped job artifacts when indexed jobs exceed the cap", () => {
+test("saveState retains all jobs under the unbounded cap", () => {
   const workspace = makeTempDir();
   const stateFile = resolveStateFile(workspace);
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
@@ -81,24 +81,27 @@ test("saveState prunes dropped job artifacts when indexed jobs exceed the cap", 
     jobs
   });
 
-  const prunedJobFile = resolveJobFile(workspace, "job-0");
-  const prunedLogFile = resolveJobLogFile(workspace, "job-0");
-  const retainedJobFile = resolveJobFile(workspace, "job-50");
-  const retainedLogFile = resolveJobLogFile(workspace, "job-50");
-  const jobsDir = path.dirname(prunedJobFile);
+  const oldestJobFile = resolveJobFile(workspace, "job-0");
+  const oldestLogFile = resolveJobLogFile(workspace, "job-0");
+  const newestJobFile = resolveJobFile(workspace, "job-50");
+  const newestLogFile = resolveJobLogFile(workspace, "job-50");
+  const jobsDir = path.dirname(oldestJobFile);
 
-  assert.equal(fs.existsSync(retainedJobFile), true);
-  assert.equal(fs.existsSync(retainedLogFile), true);
+  // Unbounded fork: nothing is pruned, so even the oldest job is retained.
+  assert.equal(fs.existsSync(oldestJobFile), true);
+  assert.equal(fs.existsSync(oldestLogFile), true);
+  assert.equal(fs.existsSync(newestJobFile), true);
+  assert.equal(fs.existsSync(newestLogFile), true);
 
   const savedState = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-  assert.equal(savedState.jobs.length, 50);
+  assert.equal(savedState.jobs.length, 51);
   assert.deepEqual(
     savedState.jobs.map((job) => job.id),
-    Array.from({ length: 50 }, (_, index) => `job-${50 - index}`)
+    Array.from({ length: 51 }, (_, index) => `job-${50 - index}`)
   );
   assert.deepEqual(
     fs.readdirSync(jobsDir).sort(),
-    Array.from({ length: 50 }, (_, index) => `job-${index + 1}`)
+    Array.from({ length: 51 }, (_, index) => `job-${index}`)
       .flatMap((jobId) => [`${jobId}.json`, `${jobId}.log`])
       .sort()
   );

@@ -64,7 +64,9 @@ import {
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REVIEW_SCHEMA = path.join(ROOT_DIR, "schemas", "review-output.schema.json");
-const DEFAULT_STATUS_WAIT_TIMEOUT_MS = 240000;
+// Unbounded fork: `status --wait` blocks until the job finishes (no default
+// timeout). Callers can still pass an explicit --timeout-ms to cap the wait.
+const DEFAULT_STATUS_WAIT_TIMEOUT_MS = Number.MAX_SAFE_INTEGER;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 2000;
 const VALID_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
 const MODEL_ALIASES = new Map([["spark", "gpt-5.3-codex-spark"]]);

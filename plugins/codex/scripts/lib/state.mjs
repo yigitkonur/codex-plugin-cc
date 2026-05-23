@@ -10,7 +10,8 @@ const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
 const FALLBACK_STATE_ROOT_DIR = path.join(os.tmpdir(), "codex-companion");
 const STATE_FILE_NAME = "state.json";
 const JOBS_DIR_NAME = "jobs";
-const MAX_JOBS = 50;
+// Unbounded fork: retain full job history (no automatic pruning).
+const MAX_JOBS = Number.MAX_SAFE_INTEGER;
 
 function nowIso() {
   return new Date().toISOString();

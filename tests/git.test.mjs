@@ -132,7 +132,9 @@ test("collectReviewContext falls back to lightweight context for larger adversar
   fs.writeFileSync(path.join(cwd, "c.js"), 'export const value = "SELF_COLLECT_MARKER_C";\n');
 
   const target = resolveReviewTarget(cwd, {});
-  const context = collectReviewContext(cwd, target);
+  // Unbounded fork: the inline cap is effectively unlimited by default, so the
+  // fallback is exercised with an explicit small file cap.
+  const context = collectReviewContext(cwd, target, { maxInlineFiles: 2 });
 
   assert.equal(context.inputMode, "self-collect");
   assert.equal(context.fileCount, 3);
@@ -173,11 +175,32 @@ test("collectReviewContext keeps untracked file content in lightweight working t
   fs.writeFileSync(path.join(cwd, "new-risk.js"), 'export const value = "UNTRACKED_RISK_MARKER";\n');
 
   const target = resolveReviewTarget(cwd, {});
-  const context = collectReviewContext(cwd, target);
+  // Unbounded fork: force the lightweight path with an explicit small file cap.
+  const context = collectReviewContext(cwd, target, { maxInlineFiles: 2 });
 
   assert.equal(context.inputMode, "self-collect");
   assert.equal(context.fileCount, 3);
   assert.doesNotMatch(context.content, /TRACKED_MARKER_[AB]/);
   assert.match(context.content, /## Untracked Files/);
   assert.match(context.content, /UNTRACKED_RISK_MARKER/);
+});
+
+test("collectReviewContext keeps inline diffs by default regardless of size (unbounded fork)", () => {
+  const cwd = makeTempDir();
+  initGitRepo(cwd);
+  for (const name of ["a.js", "b.js", "c.js"]) {
+    fs.writeFileSync(path.join(cwd, name), `export const value = "${name}-v1";\n`);
+  }
+  run("git", ["add", "a.js", "b.js", "c.js"], { cwd });
+  run("git", ["commit", "-m", "init"], { cwd });
+  fs.writeFileSync(path.join(cwd, "a.js"), 'export const value = "UNBOUNDED_MARKER_A";\n');
+  fs.writeFileSync(path.join(cwd, "b.js"), 'export const value = "UNBOUNDED_MARKER_B";\n');
+  fs.writeFileSync(path.join(cwd, "c.js"), 'export const value = "UNBOUNDED_MARKER_C";\n');
+
+  const target = resolveReviewTarget(cwd, {});
+  const context = collectReviewContext(cwd, target);
+
+  assert.equal(context.inputMode, "inline-diff");
+  assert.equal(context.fileCount, 3);
+  assert.match(context.content, /UNBOUNDED_MARKER_A/);
 });

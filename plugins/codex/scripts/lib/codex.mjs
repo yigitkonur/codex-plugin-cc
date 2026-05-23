@@ -1037,7 +1037,7 @@ export async function findLatestTaskThread(cwd) {
   return withAppServer(cwd, async (client) => {
     const response = await client.request("thread/list", {
       cwd,
-      limit: 20,
+      limit: 1000,
       sortKey: "updated_at",
       sourceKinds: ["appServer"],
       searchTerm: TASK_THREAD_PREFIX

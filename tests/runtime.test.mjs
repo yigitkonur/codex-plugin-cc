@@ -273,7 +273,7 @@ test("adversarial review accepts the same base-branch targeting as review", () =
   assert.match(result.stdout, /Missing empty-state guard/);
 });
 
-test("adversarial review asks Codex to inspect larger diffs itself", () => {
+test("adversarial review inlines larger diffs by default (unbounded fork)", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
   installFakeCodex(binDir);
@@ -295,9 +295,11 @@ test("adversarial review asks Codex to inspect larger diffs itself", () => {
 
   assert.equal(result.status, 0, result.stderr);
   const state = JSON.parse(fs.readFileSync(path.join(binDir, "fake-codex-state.json"), "utf8"));
-  assert.match(state.lastTurnStart.prompt, /lightweight summary/i);
-  assert.match(state.lastTurnStart.prompt, /read-only git commands/i);
-  assert.doesNotMatch(state.lastTurnStart.prompt, /PROMPT_SELF_COLLECT_[ABC]/);
+  // Unbounded fork: larger diffs are inlined as primary evidence instead of
+  // falling back to a lightweight self-collect summary.
+  assert.match(state.lastTurnStart.prompt, /primary evidence/i);
+  assert.doesNotMatch(state.lastTurnStart.prompt, /lightweight summary/i);
+  assert.match(state.lastTurnStart.prompt, /PROMPT_SELF_COLLECT_A/);
 });
 
 test("review includes reasoning output when the app server returns it", () => {
