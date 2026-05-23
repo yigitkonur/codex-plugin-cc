@@ -186,13 +186,27 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("codex", ["app-server"], {
-      cwd: this.cwd,
-      env: this.options.env ?? process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32" ? (process.env.SHELL || true) : false,
-      windowsHide: true
-    });
+    // Unbounded fork: force the most permissive config-only knobs on the
+    // app-server we spawn, so any installer gets them regardless of their
+    // ~/.codex/config.toml. Approval/sandbox are forced per-thread instead
+    // (see buildThreadParams). `-c` values are parsed as TOML; placed after
+    // the `app-server` subcommand, which accepts them.
+    this.proc = spawn(
+      "codex",
+      [
+        "app-server",
+        "-c", 'web_search="live"',
+        "-c", "check_for_update_on_startup=false",
+        "-c", "notice.hide_full_access_warning=true"
+      ],
+      {
+        cwd: this.cwd,
+        env: this.options.env ?? process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: process.platform === "win32" ? (process.env.SHELL || true) : false,
+        windowsHide: true
+      }
+    );
 
     this.proc.stdout.setEncoding("utf8");
     this.proc.stderr.setEncoding("utf8");
