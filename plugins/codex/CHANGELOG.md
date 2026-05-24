@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.4.1 — write-mode safety gate
+
+Single-purpose patch addressing one empirical bug discovered immediately after
+the v1.4.0 ship through real-world dogfooding.
+
+**Bug.** The v1.4.0 agent prompt (`agents/codex-it.md`) said: *"For `--write`
+runs without a spec, refuse and surface…"*. In practice Sonnet did not enforce
+this — under "helpfulness pressure" it either dispatched anyway (test T4 of
+the v1.4.0 dogfood) or auto-promoted the freeform prompt into a self-authored
+spec file and dispatched against that (observed in the auracareers/app trace
+shortly after release). Both routes burned Codex budget on under-specified
+work and produced commits in worktrees the orchestrator had not asked for.
+
+**Fix.** Move the refusal from the agent's prose into the companion's
+`handleTask`. A hard `throw new Error(...)` at the companion layer cannot be
+dispatched around by the supervisor — the gate fires before any worktree is
+created, any job state is written, or any Codex turn starts. The error
+message points at the spec-creation workflow and names `--worktree=off` as
+the deliberate escape hatch for users who really want freeform `--write`
+dispatch in-place (legacy behavior preserved, but explicit).
+
+**Behavior matrix:**
+
+| Invocation | v1.4.0 | v1.4.1 |
+|---|---|---|
+| `task --task-spec spec.md` (any mode) | dispatched | dispatched (unchanged) |
+| `task my prompt` (no --write, no spec) | dispatched read-only | dispatched read-only (unchanged) |
+| `task --write my prompt` (no spec) | **dispatched, created worktree silently** | **refused with exit 1 + clear error citing `--task-spec` and `--worktree=off`** |
+| `task --write --worktree=off my prompt` (no spec) | dispatched in-place | dispatched in-place (unchanged — documented escape) |
+
+**Files changed:**
+
+- `plugins/codex/scripts/codex-companion.mjs` — `handleTask` now hoists
+  `worktreeFlag` parsing above the gate so the `--worktree=off` escape can
+  be honored. Adds the `if (write && !taskSpec && worktreeFlag !== "off")`
+  hard-stop with an actionable error message.
+- `tests/runtime.test.mjs` — two new assertions: the refusal path (exit
+  non-zero + error message includes the three expected fragments) and the
+  escape path (`--worktree=off` cleanly queues the job).
+- `plugins/codex/.claude-plugin/plugin.json` — version 1.4.0 → 1.4.1.
+
+**Tests:** 117 → 119 (+2 new runtime assertions). The one pre-existing
+git.test.mjs:89 flake (environmental, unrelated) is still present.
+
+**Empirical grounding.** Both the v1.4.0 dogfood T4 case and the
+auracareers/app trace are explicitly cited in the code comment so a future
+maintainer can understand why the gate is at the companion layer instead of
+the more "natural" agent layer.
+
 ## 1.4.0 — codex-it fork bump
 
 Major rework of the rescue agent into a spec-driven live supervisor.

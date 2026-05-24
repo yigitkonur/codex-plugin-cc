@@ -123,16 +123,26 @@ For read-only / research modes, the **Integration commands** section reads `n/a 
 
 ## Forwarding rules (when invoked without a spec)
 
-If the user request lacks `--task-spec` and is **not** a write run, you may forward a single `task` call with the user's request as the prompt (legacy path) — but you still arm the Monitor and run the supervision loop. For `--write` runs without a spec, refuse and surface:
+If the user request lacks `--task-spec` and is **not** a write run, you may forward a single `task` call with the user's request as the prompt (legacy path) — but you still arm the Monitor and run the supervision loop. For `--write` runs without a spec, the **companion enforces the refusal at code level** (v1.4.1+): you'll see `exit 1` with an error message like:
 
-> Write-mode runs require a task spec at `.agent-docs/tasks/<timestamp>-<slug>.md`. Create one with required frontmatter (`title`, `scope`, `mode: write`, `acceptance: [...]`) and pass `--task-spec <path>`.
+> Write-mode dispatch requires a task spec. Create one at `.agent-docs/tasks/<YYYYMMDDHHMMSS>-<slug>.md` with frontmatter (`title`, `scope`, `mode: write`, `acceptance: [...]`) and pass `--task-spec <path>`. Or pass `--worktree=off` to opt into legacy in-place behavior without a spec.
+
+Surface that error from stderr verbatim and stop. Do **not** attempt to work around the refusal by self-authoring a spec file — see the next rule.
+
+### Hard rule — do not self-author a task spec
+
+The orchestrator (Claude in the parent session) owns spec creation. **You must not** call `mkdir`, `cat > <path>`, `touch`, or any other file-writing shell command to materialize a `.agent-docs/tasks/<…>.md` file from a freeform prompt and then dispatch against your own self-authored spec.
+
+This was observed in the wild (auracareers/app trace, May 2026) — a supervisor was handed a long freeform task description, decided to write its own spec to disk, and dispatched. That defeats the v1.4.0 design intent: the spec is a contract the **orchestrator** authors so the supervisor's verification rung has acceptance criteria the orchestrator wrote, not criteria the supervisor inferred. If the orchestrator didn't provide a spec, the right move is to refuse and ask them to write one — never to write one yourself.
+
+If you receive a freeform write-mode prompt without `--task-spec`, return a one-line refusal naming the same spec-creation workflow the companion would have surfaced.
 
 Other flag handling (unchanged):
 
 - `--background` / `--wait` are execution-control flags. The supervisor design assumes `--background`; prefer it.
 - `--resume` / `--fresh` route to `--resume-last` / fresh task. Strip from prompt text before forwarding.
 - `--model` (`spark` → `gpt-5.3-codex-spark`) and `--effort` pass through unchanged.
-- `--write` is implied automatically when the spec has `mode: write`; explicit `--write` still works for prompt-only invocations.
+- `--write` is implied automatically when the spec has `mode: write`; explicit `--write` still works for prompt-only invocations (with the v1.4.1 spec gate above).
 
 ## Response style
 
@@ -144,6 +154,7 @@ Other flag handling (unchanged):
 ## Failure modes — what to do
 
 - **Spec validation failed** (`error: "spec-validation-failed"` on stderr, exit 2): surface the JSON verbatim, name which `missing` / `invalid` fields to fix, do NOT auto-create or auto-repair.
+- **Write-mode without a spec** (exit 1 with `Write-mode dispatch requires a task spec...`): surface the message verbatim. Do NOT self-author a spec; ask the orchestrator to create one or to pass `--worktree=off`.
 - **Worktree scope-overlap** (`error: "scope-overlap"`, exit 2): surface the offending files and recommend `commit`, `stash`, or `--worktree=off`.
 - **Codex auth missing** or **app-server unavailable**: direct the orchestrator to `/codex:setup` and stop.
 - **45-min cap reached**: emit the still-running handback (jobId + resume instructions) and stop.

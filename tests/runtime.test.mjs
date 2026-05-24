@@ -573,7 +573,9 @@ test("write task output focuses on the Codex result without generic follow-up hi
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
 
-  const result = run("node", [SCRIPT, "task", "--write", "fix the failing test"], {
+  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
+  // this test is exercising stdout shape, not the spec-required policy.
+  const result = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the failing test"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -1388,7 +1390,9 @@ test("result for a finished write-capable task returns the raw Codex final respo
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
 
-  const taskRun = run("node", [SCRIPT, "task", "--write", "fix the flaky integration test"], {
+  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
+  // this test exercises the result subcommand's rendering, not the spec policy.
+  const taskRun = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the flaky integration test"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -1807,7 +1811,9 @@ test("stop hook runs a stop-time review task and blocks on findings when the rev
   const setupPayload = JSON.parse(setup.stdout);
   assert.equal(setupPayload.reviewGateEnabled, true);
 
-  const taskResult = run("node", [SCRIPT, "task", "--write", "fix the issue"], {
+  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
+  // this test exercises the stop-review-gate hook flow, not the spec policy.
+  const taskResult = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the issue"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -2122,4 +2128,52 @@ test("setup and status honor --cwd when reading shared session runtime", () => {
   const payload = JSON.parse(setup.stdout);
   assert.equal(payload.sessionRuntime.mode, "shared");
   assert.equal(payload.sessionRuntime.endpoint, "unix:/tmp/fake-broker.sock");
+});
+
+// v1.4.1 — write-mode safety gate. Empirically (T4 of the v1.4.0 dogfood +
+// the auracareers/app trace) the prompt-level "refuse write without spec"
+// rule in agents/codex-it.md was not enforceable: Sonnet either dispatched
+// anyway or auto-promoted a freeform prompt into a self-authored spec.
+// These tests pin the refusal to the companion layer where Sonnet cannot
+// dispatch around it.
+
+test("task refuses --write without --task-spec (v1.4.1 safety gate)", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeCodex(binDir);
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const result = run("node", [SCRIPT, "task", "--write", "just do something"], {
+    cwd: repo,
+    env: buildEnv(binDir)
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Write-mode dispatch requires a task spec/);
+  assert.match(result.stderr, /--task-spec <path>/);
+  assert.match(result.stderr, /--worktree=off to opt into legacy in-place behavior/);
+});
+
+test("task --write --worktree=off bypasses the safety gate (documented escape)", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  installFakeCodex(binDir);
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  // --background just queues the job and exits; no real Codex turn happens
+  // here so the test stays cheap.
+  const result = run(
+    "node",
+    [SCRIPT, "task", "--write", "--worktree=off", "--background", "--json", "just do something"],
+    { cwd: repo, env: buildEnv(binDir) }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /"status":\s*"queued"/);
 });

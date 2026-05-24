@@ -789,16 +789,11 @@ async function handleTask(argv) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
   const write = Boolean(options.write) || taskSpec?.frontmatter?.mode === "write";
-  const taskMetadata = buildTaskRunMetadata({
-    prompt,
-    resumeLast
-  });
 
-  // Build the job up front so the worktree directory can be named after its
-  // jobId. Single buildTaskJob call serves both foreground and background.
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
-  if (taskSpec) job.taskSpecPath = taskSpec.path;
-
+  // Worktree-flag parsing is hoisted up so the write-mode safety gate below
+  // can honor --worktree=off as the documented escape hatch for legacy
+  // freeform-prompt + --write dispatches without a spec.
+  //
   // Worktree decision per F3 (refined per C2):
   //   --worktree=auto (default): create iff write mode (read-only/research
   //     produce no commits to integrate, so worktree is dead weight)
@@ -815,6 +810,35 @@ async function handleTask(argv) {
       `Invalid --worktree value: '${worktreeFlag}'. Use one of ${VALID_WORKTREE_FLAGS.join("|")}.`
     );
   }
+
+  // v1.4.1 — write-mode safety gate. Empirically (test T4 of the v1.4.0
+  // dogfood + the auracareers/app trace) the prompt-level "refuse write
+  // without spec" rule in agents/codex-it.md was not enforceable: Sonnet
+  // would either dispatch anyway or auto-promote a freeform prompt into a
+  // self-authored spec. Moving the refusal to the companion makes it a
+  // hard-stop the supervisor cannot dispatch around. --worktree=off remains
+  // the deliberate escape for users who really want freeform in-place
+  // legacy behavior.
+  if (write && !taskSpec && worktreeFlag !== "off") {
+    throw new Error(
+      "Write-mode dispatch requires a task spec. Create one at " +
+        ".agent-docs/tasks/<YYYYMMDDHHMMSS>-<slug>.md with frontmatter " +
+        "(title, scope, mode: write, acceptance: [...]) and pass " +
+        "--task-spec <path>. Or pass --worktree=off to opt into legacy " +
+        "in-place behavior without a spec."
+    );
+  }
+
+  const taskMetadata = buildTaskRunMetadata({
+    prompt,
+    resumeLast
+  });
+
+  // Build the job up front so the worktree directory can be named after its
+  // jobId. Single buildTaskJob call serves both foreground and background.
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+  if (taskSpec) job.taskSpecPath = taskSpec.path;
+
   const shouldCreateWorktree =
     worktreeFlag === "always" || (worktreeFlag === "auto" && write);
   let effectiveCwd = cwd;
