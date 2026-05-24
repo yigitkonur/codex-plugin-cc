@@ -82,9 +82,19 @@ function handleSessionStart(input) {
   // `.claude/worktrees/codex/` in the current workspace. Best-effort; never
   // blocks SessionStart. SessionEnd does NOT auto-clean (the agent's final
   // report surfaces the explicit `git worktree remove` command per F4).
+  //
+  // Resolve to the workspace root first — if the session starts from a
+  // subdirectory, raw cwd won't point at the `.claude/worktrees/codex/` dir
+  // and prune would silently be a no-op.
   const cwd = input.cwd || process.cwd();
+  let workspaceRoot;
   try {
-    const result = pruneStaleWorktrees({ cwd, maxAgeDays: 7 });
+    workspaceRoot = resolveWorkspaceRoot(cwd);
+  } catch {
+    workspaceRoot = cwd;
+  }
+  try {
+    const result = pruneStaleWorktrees({ cwd: workspaceRoot, maxAgeDays: 7 });
     if (result.pruned > 0) {
       process.stderr.write(
         `[codex-it] pruned ${result.pruned} stale codex worktree(s); kept ${result.kept}\n`

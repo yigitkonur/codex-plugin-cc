@@ -214,5 +214,18 @@ export function pruneStaleWorktrees({ cwd, maxAgeDays = 7 } = {}) {
       }
     }
   }
+  // If we used the fs.rmSync fallback for any worktree, the parent repo's
+  // worktree-list still has orphan refs. `git worktree prune` clears those
+  // and any associated administrative files. Best-effort; never block.
+  if (pruned > 0) {
+    try {
+      execFileSync("git", ["worktree", "prune"], {
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+    } catch {
+      // ignored — orphan refs will be harmless until the next prune
+    }
+  }
   return { pruned, kept, errors };
 }
