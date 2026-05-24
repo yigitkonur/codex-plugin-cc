@@ -52,3 +52,18 @@ Prompt assembly checklist:
 Reusable blocks live in [references/prompt-blocks.md](references/prompt-blocks.md).
 Concrete end-to-end templates live in [references/codex-prompt-recipes.md](references/codex-prompt-recipes.md).
 Common failure modes to avoid live in [references/codex-prompt-antipatterns.md](references/codex-prompt-antipatterns.md).
+
+## Spec-file recipe (when invoked via `--task-spec`)
+
+When the supervisor is dispatched with a task spec (`.agent-docs/tasks/<ts>-<slug>.md`), the spec body becomes the Codex prompt verbatim. The spec also contracts the task through frontmatter (`title`, `scope`, `mode`, `acceptance`, `commit_policy`). Fold the frontmatter into the prompt as explicit XML blocks so Codex treats them as load-bearing constraints, not advice:
+
+- `<task>` — the spec body verbatim, plus a one-line preamble citing `spec.title` and `spec.scope`.
+- `<acceptance>` — one bullet per `spec.acceptance` item, exactly as written.
+- `<commit_contract>` — `commit_policy: per-phase` → "Commit after each meaningful phase with a conventional commit message referencing #<spec.issue>"; `commit_policy: single` → "Make exactly one final commit with a conventional message"; in both cases emit `## Phase` markers in the transcript before each commit, plus a final `## Done` marker.
+- `<verification_loop>` — "Before finalizing, re-state how each `<acceptance>` item is satisfied with explicit evidence (file:line, test output, or transcript reference)."
+- `<scope_safety>` — "Stay within the files/dirs listed in `<task>`'s scope; if work outside scope is unavoidable, write a `## Decision` marker to the transcript explaining why, and surface the divergence in the final summary."
+
+Anti-patterns specific to spec dispatches:
+
+- **Do not paraphrase the spec body.** Pass it through verbatim under `<task>`. The supervisor's verification depends on the spec being the canonical contract.
+- **Do not invent acceptance criteria.** If the spec lacks `acceptance:` for a write run, the companion already exited 2 — the supervisor must surface that, not write criteria itself.

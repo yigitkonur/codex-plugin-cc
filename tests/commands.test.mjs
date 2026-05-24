@@ -89,7 +89,7 @@ test("codex-it command absorbs continue semantics", () => {
   const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
   const runtimeSkill = read("skills/codex-cli-runtime/SKILL.md");
 
-  assert.match(rescue, /The final user-visible response must be Codex's output verbatim/i);
+  assert.match(rescue, /The final user-visible response must be the supervisor's markdown-table report verbatim/i);
   assert.match(rescue, /allowed-tools:\s*Bash\(node:\*\),\s*AskUserQuestion,\s*Agent/);
   // Regression for #234: `Skill(codex:it)` from the main agent recursed
   // because it.md (formerly rescue.md) named the routing with ambiguous prose ("Route this
@@ -118,40 +118,51 @@ test("codex-it command absorbs continue semantics", () => {
   assert.match(rescue, /If the request includes `--fresh`, do not ask whether to continue/i);
   assert.match(rescue, /If the user chooses continue, add `--resume`/i);
   assert.match(rescue, /If the user chooses a new thread, add `--fresh`/i);
-  assert.match(rescue, /thin forwarder only/i);
-  assert.match(rescue, /Return the Codex companion stdout verbatim to the user/i);
-  assert.match(rescue, /Do not paraphrase, summarize, rewrite, or add commentary before or after it/i);
-  assert.match(rescue, /return that command's stdout as-is/i);
-  assert.match(rescue, /Leave `--resume` and `--fresh` in the forwarded request/i);
-  assert.match(agent, /--resume/);
-  assert.match(agent, /--fresh/);
-  assert.match(agent, /thin forwarding wrapper/i);
-  assert.match(agent, /prefer foreground for a small, clearly bounded rescue request/i);
-  assert.match(agent, /If the user did not explicitly choose `--background` or `--wait` and the task looks complicated, open-ended, multi-step, or likely to keep Codex running for a long time, prefer background execution/i);
-  assert.match(agent, /Use exactly one `Bash` call/i);
-  assert.match(agent, /Do not inspect the repository, read files, grep, monitor progress, poll status, fetch results, cancel jobs, summarize output, or do any follow-up work of your own/i);
-  assert.match(agent, /Do not call `review`, `adversarial-review`, `status`, `result`, or `cancel`/i);
-  assert.match(agent, /Leave `--effort` unset unless the user explicitly requests a specific reasoning effort/i);
-  assert.match(agent, /Leave model unset by default/i);
-  assert.match(agent, /If the user asks for `spark`, map that to `--model gpt-5\.3-codex-spark`/i);
-  assert.match(agent, /If the user asks for a concrete model name such as `gpt-5\.4-mini`, pass it through with `--model`/i);
-  assert.match(agent, /Return the stdout of the `codex-companion` command exactly as-is/i);
-  assert.match(agent, /If the Bash call fails or Codex cannot be invoked, return nothing/i);
+  // commands/it.md — live supervisor framing (was: thin forwarder)
+  assert.match(rescue, /live supervisor/i);
+  assert.match(rescue, /not a thin forwarder/i);
+  assert.match(rescue, /supervisor's final markdown-table report verbatim/i);
+  assert.match(rescue, /Do not paraphrase, summarize, rewrite, or add commentary/i);
+  assert.match(rescue, /Leave `--task-spec`, `--worktree`, `--resume`, and `--fresh`/);
+  assert.match(rescue, /--task-spec <path>/);
+  assert.match(rescue, /--worktree=auto\|always\|off/);
+
+  // agents/codex-it.md — live supervisor contract
+  assert.match(agent, /tools:\s*Bash,\s*Read,\s*Monitor/);
+  assert.match(agent, /live supervisor/i);
+  assert.match(agent, /blocking[- ]poll/i);
+  assert.match(agent, /MISSION_PROTOCOL\.md/);
+  assert.match(agent, /45[- ]minute cap/i);
+  assert.match(agent, /markdown[- ]table/i);
+  assert.match(agent, /bypassPermissions/);
+  assert.match(agent, /never auto-merge|never auto-merges/i);
+  assert.match(agent, /spec\.acceptance/);
+  assert.match(agent, /git cherry-pick/);
+  assert.match(agent, /git worktree remove/);
+  assert.match(agent, /Hard read-list rule|read-list rule/i);
+  assert.match(agent, /scope-overlap/);
+  assert.match(agent, /spec-validation-failed/);
   assert.match(agent, /gpt-5-4-prompting/);
-  assert.match(agent, /only to tighten the user's request into a better Codex prompt/i);
-  assert.match(agent, /Do not use that skill to inspect the repository, reason through the problem yourself, draft a solution, or do any independent work/i);
-  assert.match(runtimeSkill, /only job is to invoke `task` once and return that stdout unchanged/i);
-  assert.match(runtimeSkill, /Do not call `setup`, `review`, `adversarial-review`, `status`, `result`, or `cancel`/i);
-  assert.match(runtimeSkill, /use the `gpt-5-4-prompting` skill to rewrite the user's request into a tighter Codex prompt/i);
-  assert.match(runtimeSkill, /That prompt drafting is the only Claude-side work allowed/i);
-  assert.match(runtimeSkill, /Leave `--effort` unset unless the user explicitly requests a specific effort/i);
-  assert.match(runtimeSkill, /Leave model unset by default/i);
-  assert.match(runtimeSkill, /Map `spark` to `--model gpt-5\.3-codex-spark`/i);
-  assert.match(runtimeSkill, /If the forwarded request includes `--background` or `--wait`, treat that as Claude-side execution control only/i);
-  assert.match(runtimeSkill, /Strip it before calling `task`/i);
-  assert.match(runtimeSkill, /`--effort`: accepted values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`/i);
-  assert.match(runtimeSkill, /Do not inspect the repository, read files, grep, monitor progress, poll status, fetch results, cancel jobs, summarize output, or do any follow-up work of your own/i);
-  assert.match(runtimeSkill, /If the Bash call fails or Codex cannot be invoked, return nothing/i);
+  assert.match(agent, /poll[- ]loop|poll loop|blocking polling loop/i);
+  assert.match(agent, /spark.*gpt-5\.3-codex-spark|gpt-5\.3-codex-spark.*spark/);
+  assert.match(agent, /still running.*handback|handback.*still.running/i);
+
+  // skills/codex-cli-runtime — new flag mappings + supervisor model
+  assert.match(runtimeSkill, /live supervisor.{0,8}not a thin forwarder/i);
+  assert.match(runtimeSkill, /MAY call `status` and `result`/i);
+  assert.match(runtimeSkill, /MUST NOT call `setup`, `review`, `adversarial-review`, or `cancel`/i);
+  assert.match(runtimeSkill, /--task-spec <path>/);
+  assert.match(runtimeSkill, /--worktree=auto\|always\|off/);
+  assert.match(runtimeSkill, /--transcript <path>/);
+  assert.match(runtimeSkill, /spec-validation-failed/);
+  assert.match(runtimeSkill, /scope-overlap/);
+  assert.match(runtimeSkill, /Mutex\*\* with `--prompt-file`|Mutex with `--prompt-file`/);
+  assert.match(runtimeSkill, /mode: write/);
+  assert.match(runtimeSkill, /Map `spark` to `--model gpt-5\.3-codex-spark`|spark.*gpt-5\.3-codex-spark/);
+  assert.match(runtimeSkill, /--effort none\|minimal\|low\|medium\|high\|xhigh/);
+  assert.match(runtimeSkill, /Default to write-capable Codex work/i);
+  assert.match(runtimeSkill, /45 minutes|45-min/);
+  assert.match(runtimeSkill, /Do not auto-repair|auto-repair specs/i);
   assert.match(readme, /`codex:codex-it` subagent/i);
   assert.match(readme, /this fork defaults reasoning effort to `high` unless you pass `--effort`/i);
   assert.match(readme, /--model gpt-5\.4-mini --effort medium/i);
@@ -181,19 +192,23 @@ test("result and cancel commands are exposed as deterministic runtime entrypoint
   assert.match(resultHandling, /if Codex was never successfully invoked, do not generate a substitute answer at all/i);
 });
 
-test("internal docs use task terminology for rescue runs", () => {
+test("internal docs use task terminology for codex-it dispatches", () => {
   const runtimeSkill = read("skills/codex-cli-runtime/SKILL.md");
   const promptingSkill = read("skills/gpt-5-4-prompting/SKILL.md");
   const promptRecipes = read("skills/gpt-5-4-prompting/references/codex-prompt-recipes.md");
 
-  assert.match(runtimeSkill, /codex-companion\.mjs" task "<raw arguments>"/);
-  assert.match(runtimeSkill, /Use `task` for every rescue request/i);
+  assert.match(runtimeSkill, /codex-companion\.mjs" <subcommand>/);
+  assert.match(runtimeSkill, /for every dispatch/i);
   assert.match(runtimeSkill, /task --resume-last/i);
+  assert.match(runtimeSkill, /task --background/i);
   assert.match(promptingSkill, /Use `task` when the task is diagnosis/i);
+  assert.match(promptingSkill, /Spec-file recipe/i);
+  assert.match(promptingSkill, /Do not paraphrase the spec body/i);
   assert.match(promptRecipes, /Codex task prompts/i);
   assert.match(promptRecipes, /Use these as starting templates for Codex task prompts/i);
   assert.match(promptRecipes, /## Diagnosis/);
   assert.match(promptRecipes, /## Narrow Fix/);
+  assert.match(promptRecipes, /## Spec-Driven Fix & Verify/);
 });
 
 test("hooks keep session-end cleanup and stop gating enabled", () => {

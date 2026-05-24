@@ -124,6 +124,50 @@ Prefer primary sources.
 </citation_rules>
 ```
 
+## Spec-Driven Fix & Verify (use when `codex:codex-it` was dispatched with `--task-spec`)
+
+```xml
+<task>
+{{spec.title}} — work within scope: {{spec.scope}}.
+
+{{spec.body}}
+</task>
+
+<acceptance>
+{{#each spec.acceptance}}
+- {{this}}
+{{/each}}
+</acceptance>
+
+<commit_contract>
+commit_policy: {{spec.commit_policy}}.
+- If per-phase: commit after each meaningful phase with a conventional commit
+  message (type(scope): summary) referencing #{{spec.issue}} where applicable.
+  Emit `## Phase N — <one-line summary>` to the transcript before each commit.
+- If single: make exactly one final commit at the end with a conventional
+  message; still emit `## Phase` markers for progress visibility.
+- In all modes: end with `## Done — <one-line summary>` in the transcript.
+</commit_contract>
+
+<verification_loop>
+Before finalizing, re-state how each <acceptance> item is satisfied with
+explicit evidence (file:line, command output, or transcript reference).
+Mark each as met or partial; do not claim met without evidence.
+</verification_loop>
+
+<scope_safety>
+Stay within the files/directories listed in <task> scope. If work outside
+scope becomes unavoidable, write a `## Decision — <reason>` marker to the
+transcript before proceeding and surface the divergence in the final summary.
+Never refactor adjacent code that is not in scope.
+</scope_safety>
+
+<missing_context_gating>
+If a required spec detail is absent or ambiguous, write a `## Blocker —
+<question>` marker to the transcript and stop rather than guessing.
+</missing_context_gating>
+```
+
 ## Prompt-Patching
 
 ```xml
