@@ -26,6 +26,12 @@ import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import { loadAndValidateSpec, SpecValidationError } from "./lib/spec-loader.mjs";
 import {
+  buildWorktreeFinishCommands,
+  createCodexWorktree,
+  slugifyTitle,
+  WorktreeError
+} from "./lib/worktree.mjs";
+import {
   generateJobId,
   getConfig,
   listJobs,
@@ -734,7 +740,7 @@ async function handleReview(argv) {
 
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["model", "effort", "cwd", "prompt-file", "task-spec"],
+    valueOptions: ["model", "effort", "cwd", "prompt-file", "task-spec", "worktree", "transcript"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
@@ -779,13 +785,52 @@ async function handleTask(argv) {
     resumeLast
   });
 
+  // Build the job up front so the worktree directory can be named after its
+  // jobId. Single buildTaskJob call serves both foreground and background.
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+  if (taskSpec) job.taskSpecPath = taskSpec.path;
+
+  // Worktree decision per F3 (refined per C2):
+  //   --worktree=auto (default): create iff write mode (read-only/research
+  //     produce no commits to integrate, so worktree is dead weight)
+  //   --worktree=always: create regardless of mode (full isolation)
+  //   --worktree=off: never create (in-place; preserves current behavior)
+  // Branch is `codex/<YYYYMMDD>-<slug>` from HEAD (includes committed local
+  // work; excludes uncommitted). Pre-flight refuses on uncommitted-scope
+  // overlap. Final report surfaces `git cherry-pick` + `worktree remove`
+  // commands — never auto-merges (F4).
+  const worktreeFlag = options.worktree ?? "auto";
+  const shouldCreateWorktree =
+    worktreeFlag === "always" || (worktreeFlag === "auto" && write);
+  let effectiveCwd = cwd;
+  let worktreeContext = null;
+  if (shouldCreateWorktree) {
+    try {
+      worktreeContext = createCodexWorktree({
+        jobId: job.id,
+        slug: slugifyTitle(taskSpec?.frontmatter?.title ?? ""),
+        scope: taskSpec?.frontmatter?.scope,
+        cwd
+      });
+      effectiveCwd = worktreeContext.path;
+      job.worktreePath = worktreeContext.path;
+      job.worktreeBranch = worktreeContext.branch;
+      job.mergeCommands = buildWorktreeFinishCommands(worktreeContext);
+    } catch (err) {
+      if (err instanceof WorktreeError) {
+        process.stderr.write(JSON.stringify(err.toJson()) + "\n");
+        process.exit(2);
+      }
+      throw err;
+    }
+  }
+
   if (options.background) {
-    ensureCodexAvailable(cwd);
+    ensureCodexAvailable(effectiveCwd);
     requireTaskRequest(prompt, resumeLast);
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write);
     const request = buildTaskRequest({
-      cwd,
+      cwd: effectiveCwd,
       model,
       effort,
       prompt,
@@ -793,17 +838,16 @@ async function handleTask(argv) {
       resumeLast,
       jobId: job.id
     });
-    const { payload } = enqueueBackgroundTask(cwd, job, request);
+    const { payload } = enqueueBackgroundTask(effectiveCwd, job, request);
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
     return;
   }
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
   await runForegroundCommand(
     job,
     (progress) =>
       executeTaskRun({
-        cwd,
+        cwd: effectiveCwd,
         model,
         effort,
         prompt,

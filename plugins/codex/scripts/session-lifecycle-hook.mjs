@@ -15,6 +15,7 @@ import {
 } from "./lib/broker-lifecycle.mjs";
 import { loadState, resolveStateFile, saveState } from "./lib/state.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
+import { pruneStaleWorktrees } from "./lib/worktree.mjs";
 
 export const SESSION_ID_ENV = "CODEX_COMPANION_SESSION_ID";
 const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
@@ -76,6 +77,22 @@ function cleanupSessionJobs(cwd, sessionId) {
 function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(PLUGIN_DATA_ENV, process.env[PLUGIN_DATA_ENV]);
+
+  // codex-it: opportunistically prune stale codex worktrees (TTL 7 days) from
+  // `.claude/worktrees/codex/` in the current workspace. Best-effort; never
+  // blocks SessionStart. SessionEnd does NOT auto-clean (the agent's final
+  // report surfaces the explicit `git worktree remove` command per F4).
+  const cwd = input.cwd || process.cwd();
+  try {
+    const result = pruneStaleWorktrees({ cwd, maxAgeDays: 7 });
+    if (result.pruned > 0) {
+      process.stderr.write(
+        `[codex-it] pruned ${result.pruned} stale codex worktree(s); kept ${result.kept}\n`
+      );
+    }
+  } catch {
+    // Best-effort. Surface nothing on the happy path.
+  }
 }
 
 async function handleSessionEnd(input) {
