@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "task-spec.schema.json",
+  "title": "Codex task specification",
+  "description": "Frontmatter contract for .agent-docs/tasks/<timestamp>-<slug>.md spec files consumed by `codex-companion task --task-spec`. The file body (everything after the closing `---`) is the Codex prompt verbatim. Runtime validation is hand-rolled in scripts/lib/spec-loader.mjs; this schema is the canonical reference.",
+  "type": "object",
+  "required": ["title", "scope", "mode"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short imperative title; surfaces in commit messages and reports."
+    },
+    "issue": {
+      "type": ["string", "number"],
+      "description": "Optional GitHub issue reference (e.g. 42 or 'owner/repo#42')."
+    },
+    "scope": {
+      "description": "Files or directories the task is allowed to touch. String or list of strings.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      ]
+    },
+    "mode": {
+      "enum": ["write", "read-only", "research"],
+      "description": "write = commits land in a worktree; read-only = no edits; research = read-only, no worktree, prompt expects evidence-backed answer."
+    },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Binary-testable conditions the supervisor cross-checks at the end. Required when mode = write."
+    },
+    "commit_policy": {
+      "enum": ["per-phase", "single"],
+      "description": "Codex commit cadence. Default: per-phase for write, single for everything else."
+    },
+    "verify_with": {
+      "enum": ["gpt-5.4", "gpt-5.5"],
+      "description": "Reserved for v1.5 review handoff. Default: gpt-5.4."
+    },
+    "timeout": {
+      "type": "string",
+      "pattern": "^[0-9]+[mh]$",
+      "description": "Supervisor wall-clock cap, e.g. '45m' or '2h'. Default: 45m (matches the agent's hard cap)."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "write" } } },
+      "then": {
+        "required": ["acceptance"],
+        "properties": { "acceptance": { "minItems": 1 } }
+      }
+    }
+  ]
+}

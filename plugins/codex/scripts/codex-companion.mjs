@@ -24,6 +24,7 @@ import { readStdinIfPiped } from "./lib/fs.mjs";
 import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "./lib/git.mjs";
 import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
+import { loadAndValidateSpec, SpecValidationError } from "./lib/spec-loader.mjs";
 import {
   generateJobId,
   getConfig,
@@ -733,7 +734,7 @@ async function handleReview(argv) {
 
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["model", "effort", "cwd", "prompt-file"],
+    valueOptions: ["model", "effort", "cwd", "prompt-file", "task-spec"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
@@ -746,14 +747,33 @@ async function handleTask(argv) {
   // Unbounded fork: default reasoning effort to "high" when the caller did not
   // request a specific effort; an explicit --effort still overrides.
   const effort = normalizeReasoningEffort(options.effort) ?? "high";
-  const prompt = readTaskPrompt(cwd, options, positionals);
+
+  // --task-spec is a mutex superset of --prompt-file. The spec frontmatter
+  // contracts the task (title/scope/mode/acceptance/commit_policy); the spec
+  // body becomes the prompt verbatim. `mode: write` implicitly sets --write.
+  if (options["task-spec"] && options["prompt-file"]) {
+    throw new Error("Use --task-spec OR --prompt-file, not both.");
+  }
+  let taskSpec = null;
+  if (options["task-spec"]) {
+    try {
+      taskSpec = loadAndValidateSpec(options["task-spec"], cwd);
+    } catch (err) {
+      if (err instanceof SpecValidationError) {
+        process.stderr.write(JSON.stringify(err.toJson()) + "\n");
+        process.exit(2);
+      }
+      throw err;
+    }
+  }
+  const prompt = taskSpec ? taskSpec.body : readTaskPrompt(cwd, options, positionals);
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);
   const fresh = Boolean(options.fresh);
   if (resumeLast && fresh) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
-  const write = Boolean(options.write);
+  const write = Boolean(options.write) || taskSpec?.frontmatter?.mode === "write";
   const taskMetadata = buildTaskRunMetadata({
     prompt,
     resumeLast
