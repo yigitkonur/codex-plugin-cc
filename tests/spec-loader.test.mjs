@@ -193,6 +193,74 @@ test("SpecValidationError.toJson produces the documented stderr shape", () => {
   });
 });
 
+test("loadAndValidateSpec rejects non-string-non-array scope (e.g. numeric)", () => {
+  const p = tempSpec(`---
+title: t
+scope: 42
+mode: write
+acceptance: [x]
+---
+Body
+`);
+  assert.throws(
+    () => loadAndValidateSpec(p, process.cwd()),
+    (err) =>
+      err instanceof SpecValidationError &&
+      err.invalid.some((i) => i.startsWith("scope:"))
+  );
+});
+
+test("loadAndValidateSpec accepts string scope and array-of-strings scope", () => {
+  const a = tempSpec(`---
+title: t
+scope: src/foo.ts
+mode: research
+---
+Body
+`);
+  const b = tempSpec(`---
+title: t
+scope: [src/foo.ts, src/bar.ts]
+mode: research
+---
+Body
+`);
+  assert.equal(loadAndValidateSpec(a, process.cwd()).frontmatter.scope, "src/foo.ts");
+  assert.deepEqual(loadAndValidateSpec(b, process.cwd()).frontmatter.scope, ["src/foo.ts", "src/bar.ts"]);
+});
+
+test("loadAndValidateSpec rejects numeric timeout (YAML coerces bare numbers)", () => {
+  const p = tempSpec(`---
+title: t
+scope: s
+mode: research
+timeout: 45
+---
+Body
+`);
+  assert.throws(
+    () => loadAndValidateSpec(p, process.cwd()),
+    (err) =>
+      err instanceof SpecValidationError &&
+      err.invalid.some((i) => i.startsWith("timeout:") && i.includes("must be a string"))
+  );
+});
+
+test("loadAndValidateSpec accepts valid timeout strings: 45m, 2h", () => {
+  for (const t of ["45m", "2h"]) {
+    const p = tempSpec(`---
+title: t
+scope: s
+mode: research
+timeout: ${t}
+---
+Body
+`);
+    const spec = loadAndValidateSpec(p, process.cwd());
+    assert.equal(spec.frontmatter.timeout, t);
+  }
+});
+
 test("loadAndValidateSpec rejects file not found with a clear invalid entry", () => {
   assert.throws(
     () => loadAndValidateSpec("/tmp/__definitely_does_not_exist__.md", process.cwd()),

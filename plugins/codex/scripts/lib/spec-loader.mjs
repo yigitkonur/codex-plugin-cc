@@ -65,6 +65,19 @@ export function loadAndValidateSpec(specPath, cwd) {
     if (empty) missing.push(key);
   }
 
+  // scope must be a string OR a non-empty array of strings. Without this,
+  // a malformed `scope: 42` would pass validation and crash at worktree
+  // creation time when scopeOverlaps() tries to iterate.
+  if (frontmatter.scope !== undefined && frontmatter.scope !== null && frontmatter.scope !== "") {
+    const isString = typeof frontmatter.scope === "string";
+    const isStringArray = Array.isArray(frontmatter.scope)
+      && frontmatter.scope.length > 0
+      && frontmatter.scope.every((s) => typeof s === "string" && s.length > 0);
+    if (!isString && !isStringArray) {
+      invalid.push(`scope: must be a string or non-empty array of strings (got ${typeof frontmatter.scope === "object" ? "array/object" : typeof frontmatter.scope})`);
+    }
+  }
+
   if (frontmatter.mode !== undefined && !VALID_MODES.includes(frontmatter.mode)) {
     invalid.push(`mode: '${frontmatter.mode}' is not in [${VALID_MODES.join(", ")}]`);
   }
@@ -79,8 +92,15 @@ export function loadAndValidateSpec(specPath, cwd) {
   if (frontmatter.verify_with !== undefined && !VALID_VERIFY_WITH.includes(frontmatter.verify_with)) {
     invalid.push(`verify_with: '${frontmatter.verify_with}' is not in [${VALID_VERIFY_WITH.join(", ")}]`);
   }
-  if (frontmatter.timeout !== undefined && typeof frontmatter.timeout === "string" && !/^\d+[mh]$/.test(frontmatter.timeout)) {
-    invalid.push(`timeout: '${frontmatter.timeout}' must match /^\\d+[mh]$/ (e.g. 45m, 2h)`);
+  // timeout must be a string matching /^\d+[mh]$/. parseScalar coerces bare
+  // numeric YAML values (e.g. `timeout: 45`) to numbers, which previously
+  // bypassed this validation entirely. Reject any non-string explicitly.
+  if (frontmatter.timeout !== undefined && frontmatter.timeout !== null) {
+    if (typeof frontmatter.timeout !== "string") {
+      invalid.push(`timeout: must be a string like '45m' or '2h' (got ${typeof frontmatter.timeout}: ${JSON.stringify(frontmatter.timeout)}). Quote the value or add a 'm'/'h' suffix.`);
+    } else if (!/^\d+[mh]$/.test(frontmatter.timeout)) {
+      invalid.push(`timeout: '${frontmatter.timeout}' must match /^\\d+[mh]$/ (e.g. 45m, 2h)`);
+    }
   }
   if (!body || body.trim().length === 0) {
     missing.push("body (the task prompt — markdown content after the frontmatter)");
