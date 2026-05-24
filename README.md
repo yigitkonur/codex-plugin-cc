@@ -146,21 +146,22 @@ In this fork this command runs with full access and is **not** read-only — it 
 
 ### `/codex:it`
 
-Hands a task to Codex through the `codex:codex-it` subagent.
+Hands a substantial task to Codex through the `codex:codex-it` subagent — a **live supervisor** (not a thin forwarder) that enqueues Codex with `--background`, polls status until terminal, watches structured transcript markers, and ends with a markdown-table report.
 
 Use it when you want Codex to:
 
 - investigate a bug
-- try a fix
+- implement a focused fix or refactor
 - continue a previous Codex task
+- research a question and return cited evidence
 - take a faster or cheaper pass with a smaller model
 
 > [!NOTE]
-> Depending on the task and the model you choose these tasks might take a long time and it's generally recommended to force the task to be in the background or move the agent to the background.
+> Substantial tasks can run for many minutes. The supervisor uses `--background` and a blocking-poll loop, capped at 45 minutes; on cap it returns a "still running" handback naming the `jobId` so you can resume with `/codex:status` and `/codex:result`.
 
-It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest rescue thread for this repo.
+It supports `--task-spec <path>`, `--worktree=auto|always|off`, `--background`, `--wait`, `--resume`, `--fresh`, `--model`, and `--effort`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest Codex thread for this repo.
 
-Examples:
+#### Quick usage (no spec)
 
 ```bash
 /codex:it investigate why the tests started failing
@@ -177,11 +178,61 @@ You can also just ask for a task to be delegated to Codex:
 Ask Codex to redesign the database connection to be more resilient.
 ```
 
+#### Spec-driven usage (recommended for write tasks)
+
+For any task that should produce commits, write a **task spec** first (see the next section). Then dispatch:
+
+```bash
+/codex:it --task-spec .agent-docs/tasks/20260524-143521-fix-the-thing.md
+```
+
+The supervisor refuses to run write-mode dispatches without a spec — pass one, or use `--worktree=off` and accept that no integration commands will be surfaced.
+
 **Notes:**
 
-- if you do not pass `--model`, Codex chooses its own default; this fork defaults reasoning effort to `high` unless you pass `--effort`.
-- if you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`
-- follow-up rescue requests can continue the latest Codex task in the repo
+- If you do not pass `--model`, Codex chooses its own default; this fork defaults reasoning effort to `high` unless you pass `--effort`.
+- If you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`.
+- Follow-up requests can continue the latest Codex task in the repo via `--resume`.
+- The supervisor's final response is a markdown-table report — surface integration commands per F4 (never auto-merge).
+
+### Task spec files (`.agent-docs/tasks/`)
+
+A task spec is a markdown file with YAML frontmatter that contracts a Codex run. The frontmatter defines `title`, `scope`, `mode` (`write` / `read-only` / `research`), `acceptance` criteria, and optional `issue`, `commit_policy`, `verify_with`, and `timeout`. The body — everything after the closing `---` — becomes the Codex prompt verbatim.
+
+**File naming.** Timestamp-prefixed kebab-case, UTC: `.agent-docs/tasks/YYYYMMDDHHMMSS-<slug>.md`. The timestamp sorts lexically and chronologically, never races under parallel creation, and tells you when the task was authored.
+
+**Minimal write-mode spec:**
+
+```markdown
+---
+title: Stop poisoning RunFinalizeCheckpoint in stage-finalizing
+issue: 2
+scope: supabase/functions/stage-finalizing/index.ts
+mode: write
+acceptance:
+  - claimStep insert is removed
+  - finalizing_progress events still emit for each step
+  - runs.finished_at and finalizing_completed_at still written at the end
+  - npm test passes
+commit_policy: single
+---
+Remove the no-op `claimStep` insert in `supabase/functions/stage-finalizing/
+index.ts:12-22` so the real finalizer's checkpoint mutex is no longer
+poisoned by the edge stub. Preserve the progress-event loop and the final
+`runs` update. Add an inline comment naming #2 + #28.
+```
+
+**Validation.** Required frontmatter: `title`, `scope`, `mode`. For `mode: write`, `acceptance` must have at least one item. The companion validates against `plugins/codex/schemas/task-spec.schema.json` and exits 2 with structured stderr JSON (`{error, path, missing, invalid}`) on failure — the supervisor surfaces the JSON and stops without inventing missing fields.
+
+**Worktree behavior (F3-refined).** By default (`--worktree=auto`), write-mode dispatches create a fresh git worktree under `<cwd>/.claude/worktrees/codex/<jobId>/` on branch `codex/<YYYYMMDD>-<slug>`, branching from `HEAD` (committed local work included; uncommitted changes excluded). Read-only and research modes stay in-place (no worktree). A pre-flight check refuses creation if uncommitted files overlap the spec's `scope`. `--worktree=always` forces a worktree even for read-only; `--worktree=off` forces in-place even for write.
+
+**Integration (F4 — never auto-merge).** When Codex finishes, the supervisor's final report surfaces the exact commands:
+
+- `git -C <worktree> log --oneline <branch>` — list the commits.
+- `git cherry-pick $(git -C <worktree> log --reverse --format=%H <branch> ^HEAD | xargs)` — apply them.
+- `git worktree remove <path>` and `git branch -D <branch>` — clean up.
+
+The supervisor never runs these. You (or the orchestrator) decide whether and how to integrate. Stale worktrees older than 7 days get pruned at SessionStart automatically.
 
 ### `/codex:status`
 
