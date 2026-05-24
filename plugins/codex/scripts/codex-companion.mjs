@@ -567,7 +567,7 @@ function getJobKindLabel(kind, jobClass) {
   if (kind === "adversarial-review") {
     return "adversarial-review";
   }
-  return jobClass === "review" ? "review" : "rescue";
+  return jobClass === "review" ? "review" : "task";
 }
 
 function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false }) {
@@ -647,9 +647,16 @@ async function runForegroundCommand(job, runner, options = {}) {
   return execution;
 }
 
-function spawnDetachedTaskWorker(cwd, jobId) {
+function spawnDetachedTaskWorker(cwd, jobId, workspaceRoot) {
   const scriptPath = path.join(ROOT_DIR, "scripts", "codex-companion.mjs");
-  const child = spawn(process.execPath, [scriptPath, "task-worker", "--cwd", cwd, "--job-id", jobId], {
+  // workspaceRoot may differ from cwd when a worktree is in use: cwd is the
+  // worktree (so Codex operates there), workspaceRoot is the original repo
+  // root (so the worker can find the job state stored under it).
+  const args = ["task-worker", "--cwd", cwd, "--job-id", jobId];
+  if (workspaceRoot && workspaceRoot !== cwd) {
+    args.push("--workspace-root", workspaceRoot);
+  }
+  const child = spawn(process.execPath, [scriptPath, ...args], {
     cwd,
     env: process.env,
     detached: true,
@@ -664,7 +671,9 @@ function enqueueBackgroundTask(cwd, job, request) {
   const { logFile } = createTrackedProgress(job);
   appendLogLine(logFile, "Queued for background execution.");
 
-  const child = spawnDetachedTaskWorker(cwd, job.id);
+  // Pass the original workspaceRoot through to the worker so it can locate
+  // the stored job state even when running inside a worktree (cwd ≠ root).
+  const child = spawnDetachedTaskWorker(cwd, job.id, job.workspaceRoot);
   const queuedRecord = {
     ...job,
     status: "queued",
@@ -800,15 +809,24 @@ async function handleTask(argv) {
   // overlap. Final report surfaces `git cherry-pick` + `worktree remove`
   // commands — never auto-merges (F4).
   const worktreeFlag = options.worktree ?? "auto";
+  const VALID_WORKTREE_FLAGS = ["auto", "always", "off"];
+  if (!VALID_WORKTREE_FLAGS.includes(worktreeFlag)) {
+    throw new Error(
+      `Invalid --worktree value: '${worktreeFlag}'. Use one of ${VALID_WORKTREE_FLAGS.join("|")}.`
+    );
+  }
   const shouldCreateWorktree =
     worktreeFlag === "always" || (worktreeFlag === "auto" && write);
   let effectiveCwd = cwd;
   let worktreeContext = null;
   if (shouldCreateWorktree) {
     try {
+      // Pass the raw title; createCodexWorktree calls slugifyTitle exactly
+      // once internally to avoid double-slugification of an already-slugged
+      // input (the operation is idempotent but doing it twice obscures intent).
       worktreeContext = createCodexWorktree({
         jobId: job.id,
-        slug: slugifyTitle(taskSpec?.frontmatter?.title ?? ""),
+        slug: taskSpec?.frontmatter?.title ?? "",
         scope: taskSpec?.frontmatter?.scope,
         cwd
       });
@@ -862,7 +880,7 @@ async function handleTask(argv) {
 
 async function handleTaskWorker(argv) {
   const { options } = parseCommandInput(argv, {
-    valueOptions: ["cwd", "job-id"]
+    valueOptions: ["cwd", "job-id", "workspace-root"]
   });
 
   if (!options["job-id"]) {
@@ -870,7 +888,12 @@ async function handleTaskWorker(argv) {
   }
 
   const cwd = resolveCommandCwd(options);
-  const workspaceRoot = resolveCommandWorkspace(options);
+  // When the worker was spawned for a worktree-backed run, --workspace-root
+  // points to the ORIGINAL repo root where the job state lives. Fall back to
+  // deriving from --cwd for legacy non-worktree dispatches.
+  const workspaceRoot = options["workspace-root"]
+    ? path.resolve(options["workspace-root"])
+    : resolveCommandWorkspace(options);
   const storedJob = readStoredJob(workspaceRoot, options["job-id"]);
   if (!storedJob) {
     throw new Error(`No stored job found for ${options["job-id"]}.`);
@@ -907,12 +930,14 @@ async function handleTaskWorker(argv) {
 
 async function handleStatus(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["cwd", "timeout-ms", "poll-interval-ms"],
+    valueOptions: ["cwd", "timeout-ms", "poll-interval-ms", "job-id"],
     booleanOptions: ["json", "all", "wait"]
   });
 
   const cwd = resolveCommandCwd(options);
-  const reference = positionals[0] ?? "";
+  // Accept either positional (legacy CLI ergonomics) or --job-id (used by the
+  // codex-it supervisor's polling loop). Positional wins if both are passed.
+  const reference = positionals[0] ?? options["job-id"] ?? "";
   if (reference) {
     const snapshot = options.wait
       ? await waitForSingleJobSnapshot(cwd, reference, {
@@ -934,12 +959,14 @@ async function handleStatus(argv) {
 
 function handleResult(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
+    valueOptions: ["cwd", "job-id"],
     booleanOptions: ["json"]
   });
 
   const cwd = resolveCommandCwd(options);
-  const reference = positionals[0] ?? "";
+  // Accept either positional or --job-id (parity with `status` for the
+  // codex-it supervisor's result-fetch step).
+  const reference = positionals[0] ?? options["job-id"] ?? "";
   const { workspaceRoot, job } = resolveResultJob(cwd, reference);
   const storedJob = readStoredJob(workspaceRoot, job.id);
   const payload = {
@@ -987,12 +1014,13 @@ function handleTaskResumeCandidate(argv) {
 
 async function handleCancel(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
+    valueOptions: ["cwd", "job-id"],
     booleanOptions: ["json"]
   });
 
   const cwd = resolveCommandCwd(options);
-  const reference = positionals[0] ?? "";
+  // Accept either positional or --job-id (parity with `status` / `result`).
+  const reference = positionals[0] ?? options["job-id"] ?? "";
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference, { env: process.env });
   const existing = readStoredJob(workspaceRoot, job.id) ?? {};
   const threadId = existing.threadId ?? job.threadId ?? null;

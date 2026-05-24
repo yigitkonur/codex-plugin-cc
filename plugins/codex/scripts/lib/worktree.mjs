@@ -155,13 +155,26 @@ export function createCodexWorktree({ jobId, slug, scope, cwd }) {
   return { path: worktreePath, branch };
 }
 
-export function buildWorktreeFinishCommands({ worktreePath, branch }) {
+// Single-quote a shell value: wrap in '...', escape embedded single quotes
+// as '\''.  Safe for paths or branch names with spaces or shell metacharacters.
+function shq(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+export function buildWorktreeFinishCommands({ path: worktreePath, branch }) {
+  // Parameter accepts the shape returned by createCodexWorktree: { path, branch }.
+  // All interpolated values are single-quoted so the generated commands stay
+  // copy-paste safe even when the path contains spaces or shell metacharacters.
+  // The cherry-pick form guards the empty-SHA-list case (no commits on the
+  // branch yet) so `git cherry-pick` with no args doesn't error.
+  const wt = shq(worktreePath);
+  const br = shq(branch);
   return {
-    listCommits: `git -C ${worktreePath} log --oneline ${branch}`,
-    cherryPick: `git cherry-pick $(git -C ${worktreePath} log --reverse --format=%H ${branch} ^HEAD | xargs)`,
-    fastForward: `git merge --ff-only ${branch}`,
-    removeWorktree: `git worktree remove ${worktreePath}`,
-    deleteBranch: `git branch -D ${branch}`
+    listCommits: `git -C ${wt} log --oneline ${br}`,
+    cherryPick: `shas=$(git -C ${wt} log --reverse --format=%H ${br} ^HEAD); [ -n "$shas" ] && git cherry-pick $shas || echo "no commits to cherry-pick"`,
+    fastForward: `git merge --ff-only ${br}`,
+    removeWorktree: `git worktree remove ${wt}`,
+    deleteBranch: `git branch -D ${br}`
   };
 }
 

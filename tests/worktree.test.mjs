@@ -102,15 +102,43 @@ test("resolveBranchName suffixes on collision (codex/<date>-<slug> taken → -2)
   assert.equal(branch, `codex/${today}-existing-2`);
 });
 
-test("buildWorktreeFinishCommands returns the four documented commands", () => {
+test("buildWorktreeFinishCommands returns the five documented commands, shell-quoted, and pairs with createCodexWorktree's return shape", () => {
+  // Accepts { path, branch } (the same shape createCodexWorktree returns).
   const cmds = buildWorktreeFinishCommands({
-    worktreePath: "/tmp/wt",
+    path: "/tmp/wt",
     branch: "codex/20260524-test"
   });
-  assert.match(cmds.listCommits, /^git -C \/tmp\/wt log --oneline codex\/20260524-test$/);
-  assert.match(cmds.cherryPick, /^git cherry-pick \$/);
-  assert.equal(cmds.removeWorktree, "git worktree remove /tmp/wt");
-  assert.equal(cmds.deleteBranch, "git branch -D codex/20260524-test");
+  // All interpolated values are single-quoted, including the simple cases.
+  assert.equal(cmds.listCommits, "git -C '/tmp/wt' log --oneline 'codex/20260524-test'");
+  assert.equal(cmds.fastForward, "git merge --ff-only 'codex/20260524-test'");
+  assert.equal(cmds.removeWorktree, "git worktree remove '/tmp/wt'");
+  assert.equal(cmds.deleteBranch, "git branch -D 'codex/20260524-test'");
+  // Cherry-pick guards the empty-SHA case (no commits → no-op + message).
+  assert.match(cmds.cherryPick, /^shas=\$\(git -C '\/tmp\/wt' log --reverse --format=%H 'codex\/20260524-test' \^HEAD\); \[ -n "\$shas" \] && git cherry-pick \$shas \|\| echo "no commits to cherry-pick"$/);
+});
+
+test("buildWorktreeFinishCommands shell-quotes paths with spaces and shell metacharacters", () => {
+  const cmds = buildWorktreeFinishCommands({
+    path: "/Users/Bob's Mac/repo/.claude/worktrees/codex/abc",
+    branch: "codex/20260524-fix$thing"
+  });
+  // Single quote inside the path is escaped as '\''.
+  assert.ok(cmds.removeWorktree.includes("'/Users/Bob'\\''s Mac/repo/.claude/worktrees/codex/abc'"));
+  // $ in the branch name doesn't get expanded — it's inside single quotes.
+  assert.ok(cmds.deleteBranch.endsWith("'codex/20260524-fix$thing'"));
+});
+
+test("buildWorktreeFinishCommands consumes createCodexWorktree's return value directly", () => {
+  const cwd = mkRepo();
+  const wt = createCodexWorktree({ jobId: "task-pair", slug: "pair-test", cwd });
+  const cmds = buildWorktreeFinishCommands(wt);
+  // No `undefined` in the generated commands.
+  for (const cmd of Object.values(cmds)) {
+    assert.ok(!cmd.includes("undefined"), `command should not contain "undefined": ${cmd}`);
+  }
+  // The actual worktree path + branch are present, quoted.
+  assert.ok(cmds.removeWorktree.includes(`'${wt.path}'`));
+  assert.ok(cmds.deleteBranch.endsWith(`'${wt.branch}'`));
 });
 
 test("pruneStaleWorktrees removes directories older than maxAgeDays", () => {
