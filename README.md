@@ -26,7 +26,7 @@ they already have.
 
 - `/codex:review` for a Codex code review (full access in this fork, not read-only)
 - `/codex:adversarial-review` for a steerable challenge review
-- `/codex:rescue`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
+- `/codex:it`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
 
 ## Requirements
 
@@ -50,7 +50,7 @@ Install the plugin:
 
 > [!IMPORTANT]
 > This fork ships the same plugin name (`codex`) so all `/codex:*` commands and the
-> `codex:codex-rescue` subagent keep working. If you already have the official
+> `codex:codex-it` subagent keep working. If you already have the official
 > `codex@openai-codex` plugin installed, uninstall it first to avoid a duplicate
 > `codex` plugin name: `/plugin uninstall codex@openai-codex`.
 
@@ -83,7 +83,7 @@ If Codex is installed but not logged in yet, run:
 After install, you should see:
 
 - the slash commands listed below
-- the `codex:codex-rescue` subagent in `/agents`
+- the `codex:codex-it` subagent in `/agents`
 
 One simple first run is:
 
@@ -144,9 +144,9 @@ Examples:
 
 In this fork this command runs with full access and is **not** read-only — it can modify code or use the network.
 
-### `/codex:rescue`
+### `/codex:it`
 
-Hands a task to Codex through the `codex:codex-rescue` subagent.
+Hands a task to Codex through the `codex:codex-it` subagent.
 
 Use it when you want Codex to:
 
@@ -163,12 +163,12 @@ It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--
 Examples:
 
 ```bash
-/codex:rescue investigate why the tests started failing
-/codex:rescue fix the failing test with the smallest safe patch
-/codex:rescue --resume apply the top fix from the last run
-/codex:rescue --model gpt-5.4-mini --effort medium investigate the flaky integration test
-/codex:rescue --model spark fix the issue quickly
-/codex:rescue --background investigate the regression
+/codex:it investigate why the tests started failing
+/codex:it fix the failing test with the smallest safe patch
+/codex:it --resume apply the top fix from the last run
+/codex:it --model gpt-5.4-mini --effort medium investigate the flaky integration test
+/codex:it --model spark fix the issue quickly
+/codex:it --background investigate the regression
 ```
 
 You can also just ask for a task to be delegated to Codex:
@@ -253,14 +253,14 @@ When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted
 ### Hand A Problem To Codex
 
 ```bash
-/codex:rescue investigate why the build is failing in CI
+/codex:it investigate why the build is failing in CI
 ```
 
 ### Start Something Long-Running
 
 ```bash
 /codex:adversarial-review --background
-/codex:rescue --background investigate the flaky test
+/codex:it --background investigate the flaky test
 ```
 
 Then check in with:

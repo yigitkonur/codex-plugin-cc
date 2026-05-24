@@ -4,8 +4,8 @@ argument-hint: "[--background|--wait] [--resume|--fresh] [--model <model|spark>]
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---
 
-Invoke the `codex:codex-rescue` subagent via the `Agent` tool (`subagent_type: "codex:codex-rescue"`), forwarding the raw user request as the prompt.
-`codex:codex-rescue` is a subagent, not a skill — do not call `Skill(codex:codex-rescue)` (no such skill) or `Skill(codex:rescue)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
+Invoke the `codex:codex-it` subagent via the `Agent` tool (`subagent_type: "codex:codex-it"`), forwarding the raw user request as the prompt.
+`codex:codex-it` is a subagent, not a skill — do not call `Skill(codex:codex-it)` (no such skill) or `Skill(codex:it)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
 The final user-visible response must be Codex's output verbatim.
 
 Raw user request:
@@ -13,8 +13,8 @@ $ARGUMENTS
 
 Execution mode:
 
-- If the request includes `--background`, run the `codex:codex-rescue` subagent in the background.
-- If the request includes `--wait`, run the `codex:codex-rescue` subagent in the foreground.
+- If the request includes `--background`, run the `codex:codex-it` subagent in the background.
+- If the request includes `--wait`, run the `codex:codex-it` subagent in the foreground.
 - If neither flag is present, default to foreground.
 - `--background` and `--wait` are execution flags for Claude Code. Do not forward them to `task`, and do not treat them as part of the natural-language task text.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `task` call, but do not treat them as part of the natural-language task text.
