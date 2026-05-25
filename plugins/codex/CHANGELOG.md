@@ -1,5 +1,96 @@
 # Changelog
 
+## 1.4.3 — retire the `--worktree=off` gate escape (BREAKING)
+
+Closes the same family of bug a fourth time. After v1.4.0, v1.4.1, and
+v1.4.2 each shipped a prompt-level rule that the next dogfood found a
+bypass for, the diagnosis became unmistakable: **prompt rules bind only
+when the agent has no viable alternative path.** As long as
+`--worktree=off` existed as a documented escape from the write-mode-without-spec
+gate, Sonnet would self-elaborate `--write` and `--worktree=off` to satisfy
+its helpfulness pressure on freeform write-mode-feeling prompts (proven in
+both the v1.4.1 T2 dogfood and the v1.4.2 regression test, each producing
+an unsolicited commit on the user's main branch).
+
+**Breaking change.** The `--worktree=off` escape from the write-mode-without-spec
+gate is **retired**. The v1.4.1 gate becomes unconditional:
+
+```js
+// codex-companion.mjs handleTask, post-v1.4.3:
+if (write && !taskSpec) {
+  throw new Error("Write-mode dispatch requires a task spec...");
+}
+```
+
+There is no longer any way to dispatch `--write` without a `--task-spec`.
+`--worktree=off` retains its legitimate use (skipping worktree creation
+when the user provided a spec but wants in-place execution), but cannot
+be used to bypass the write-mode-without-spec gate.
+
+**Why this is the right closure (and the prior three weren't).** Removing
+the escape eliminates the alternative. Sonnet's remaining bypass path
+would be to self-author a `--task-spec` file — already blocked by the
+v1.4.1 prompt rule that DID bind in practice (the v1.4.1 T1 dogfood
+showed prompt rules bind cleanly when no alternative exists). Defense in
+depth becomes coherent: code gate unconditional, prompt rule covers the
+only remaining route.
+
+**Affected files:**
+
+- `plugins/codex/scripts/codex-companion.mjs` — gate condition simplified
+  from `if (write && !taskSpec && worktreeFlag !== "off")` to
+  `if (write && !taskSpec)`. Error message updated to cite the v1.4.3
+  empirical grounding.
+- `plugins/codex/agents/codex-it.md` — refusal-message quote updated;
+  the `--worktree=off` paragraph in the "do not elaborate flags" section
+  rewritten to acknowledge the escape is gone; failure-mode section
+  updated.
+- `plugins/codex/skills/codex-cli-runtime/SKILL.md` — `--write` entry
+  rewritten to document the unconditional gate.
+- `plugins/codex/CHANGELOG.md` — this entry.
+- `plugins/codex/.claude-plugin/plugin.json` — version 1.4.2 → 1.4.3.
+- `tests/runtime.test.mjs` — the v1.4.1 "documented escape" test rewritten
+  to assert the v1.4.3 closure (the escape now also refuses); three
+  pre-existing write-mode tests refactored to use `--task-spec` instead
+  of the retired `--write --worktree=off` shortcut. Each refactor cited
+  in a one-line comment.
+
+**Migration for downstream users of `--worktree=off + --write` without a
+spec:**
+
+Before v1.4.3:
+```bash
+codex-companion task --write --worktree=off "freeform write prompt"
+```
+
+After v1.4.3 (write the spec first):
+```bash
+cat > .agent-docs/tasks/$(date -u +%Y%m%d%H%M%S)-quick.md <<'EOF'
+---
+title: quick task
+scope: <files>
+mode: write
+acceptance:
+  - <criterion>
+---
+freeform write prompt
+EOF
+codex-companion task --task-spec .agent-docs/tasks/$(ls -1t .agent-docs/tasks | head -1)
+```
+
+The friction is intentional: write-mode work needs an acceptance contract
+the supervisor can verify against. If you don't want to write a spec, the
+work isn't write-mode — drop `--write` and dispatch read-only.
+
+**Tests:** runtime suite at 119 / 118 / 1 unchanged in test count (three
+existing tests refactored, one v1.4.1 test rewritten — all still passing).
+Pre-existing git.test.mjs:89 flake unrelated.
+
+**Empirical grounding.** Cited inline in the code comment + the CHANGELOG:
+the v1.4.1 T2 dogfood commit `2847c59` and the v1.4.2 dogfood commit
+`3472518`, both unsolicited write-mode commits on `saas-zeoradar/main`
+produced via the escape Sonnet was abusing.
+
 ## 1.4.2 — agent must not elaborate flags
 
 Closes a new bypass route the v1.4.1 dogfood (T2) exposed: when handed a

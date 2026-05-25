@@ -811,21 +811,30 @@ async function handleTask(argv) {
     );
   }
 
-  // v1.4.1 — write-mode safety gate. Empirically (test T4 of the v1.4.0
-  // dogfood + the auracareers/app trace) the prompt-level "refuse write
-  // without spec" rule in agents/codex-it.md was not enforceable: Sonnet
-  // would either dispatch anyway or auto-promote a freeform prompt into a
-  // self-authored spec. Moving the refusal to the companion makes it a
-  // hard-stop the supervisor cannot dispatch around. --worktree=off remains
-  // the deliberate escape for users who really want freeform in-place
-  // legacy behavior.
-  if (write && !taskSpec && worktreeFlag !== "off") {
+  // v1.4.3 — write-mode safety gate (UNCONDITIONAL; no escape).
+  //
+  // v1.4.1 added this gate. v1.4.1 also kept --worktree=off as a documented
+  // escape hatch for legacy freeform-prompt + --write dispatches. v1.4.2's
+  // dogfood (the "implement an LRU cache" prompt) showed the agent layer
+  // self-adding BOTH --write AND --worktree=off on the user's behalf to
+  // walk through that escape — producing an unsolicited commit
+  // (3472518 in saas-zeoradar). Three iterations of prompt-level rules
+  // ("refuse write without spec" / "do not self-author specs" / "do not
+  // elaborate flags") were each bypassed via a different route.
+  //
+  // The lesson: every documented escape is an attack surface for
+  // self-elaboration. The only durable closure is to eliminate the escape.
+  // v1.4.3 makes the gate unconditional: --write requires --task-spec, no
+  // exceptions. Users who legitimately want freeform write-mode dispatch
+  // must create a spec — there is no shortcut.
+  if (write && !taskSpec) {
     throw new Error(
       "Write-mode dispatch requires a task spec. Create one at " +
         ".agent-docs/tasks/<YYYYMMDDHHMMSS>-<slug>.md with frontmatter " +
         "(title, scope, mode: write, acceptance: [...]) and pass " +
-        "--task-spec <path>. Or pass --worktree=off to opt into legacy " +
-        "in-place behavior without a spec."
+        "--task-spec <path>. v1.4.3: --worktree=off no longer bypasses " +
+        "this check (it was abused by the agent layer to self-bypass in " +
+        "the v1.4.1/v1.4.2 dogfoods, producing unsolicited commits)."
     );
   }
 

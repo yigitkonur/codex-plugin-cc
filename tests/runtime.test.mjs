@@ -573,9 +573,15 @@ test("write task output focuses on the Codex result without generic follow-up hi
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
 
-  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
-  // this test is exercising stdout shape, not the spec-required policy.
-  const result = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the failing test"], {
+  // v1.4.3 — the --worktree=off escape is retired; write-mode tests must
+  // provide a task spec. The spec sets mode: write which implies --write.
+  // This test exercises stdout shape, not the spec policy itself.
+  const specPath = path.join(repo, "task-spec.md");
+  fs.writeFileSync(
+    specPath,
+    "---\ntitle: fix the failing test\nscope: README.md\nmode: write\nacceptance:\n  - test passes\n---\nfix the failing test\n"
+  );
+  const result = run("node", [SCRIPT, "task", "--task-spec", specPath, "--worktree=off"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -1390,9 +1396,14 @@ test("result for a finished write-capable task returns the raw Codex final respo
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
 
-  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
-  // this test exercises the result subcommand's rendering, not the spec policy.
-  const taskRun = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the flaky integration test"], {
+  // v1.4.3 — the --worktree=off escape is retired; this test uses a spec.
+  // The spec exercises the result subcommand's rendering, not the spec policy.
+  const specPath = path.join(repo, "task-spec.md");
+  fs.writeFileSync(
+    specPath,
+    "---\ntitle: fix the flaky integration test\nscope: README.md\nmode: write\nacceptance:\n  - test passes\n---\nfix the flaky integration test\n"
+  );
+  const taskRun = run("node", [SCRIPT, "task", "--task-spec", specPath, "--worktree=off"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -1811,9 +1822,14 @@ test("stop hook runs a stop-time review task and blocks on findings when the rev
   const setupPayload = JSON.parse(setup.stdout);
   assert.equal(setupPayload.reviewGateEnabled, true);
 
-  // --worktree=off opts out of the v1.4.1 write-without-spec safety gate;
-  // this test exercises the stop-review-gate hook flow, not the spec policy.
-  const taskResult = run("node", [SCRIPT, "task", "--write", "--worktree=off", "fix the issue"], {
+  // v1.4.3 — the --worktree=off escape is retired; this test uses a spec.
+  // The spec exercises the stop-review-gate hook flow, not the spec policy.
+  const specPath = path.join(repo, "task-spec.md");
+  fs.writeFileSync(
+    specPath,
+    "---\ntitle: fix the issue\nscope: README.md\nmode: write\nacceptance:\n  - issue fixed\n---\nfix the issue\n"
+  );
+  const taskResult = run("node", [SCRIPT, "task", "--task-spec", specPath, "--worktree=off"], {
     cwd: repo,
     env: buildEnv(binDir)
   });
@@ -2137,7 +2153,7 @@ test("setup and status honor --cwd when reading shared session runtime", () => {
 // These tests pin the refusal to the companion layer where Sonnet cannot
 // dispatch around it.
 
-test("task refuses --write without --task-spec (v1.4.1 safety gate)", () => {
+test("task refuses --write without --task-spec (v1.4.1 safety gate, made unconditional in v1.4.3)", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
   installFakeCodex(binDir);
@@ -2154,10 +2170,16 @@ test("task refuses --write without --task-spec (v1.4.1 safety gate)", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Write-mode dispatch requires a task spec/);
   assert.match(result.stderr, /--task-spec <path>/);
-  assert.match(result.stderr, /--worktree=off to opt into legacy in-place behavior/);
+  // v1.4.3 — error message names the empirical grounding for retiring the escape.
+  assert.match(result.stderr, /--worktree=off no longer bypasses this check/);
 });
 
-test("task --write --worktree=off bypasses the safety gate (documented escape)", () => {
+test("task --write --worktree=off ALSO refuses without --task-spec (v1.4.3 — escape retired)", () => {
+  // v1.4.3 closure: the --worktree=off escape from the write-mode-without-spec
+  // gate was abused by the agent layer (v1.4.1 T2 dogfood + v1.4.2 regression,
+  // each producing an unsolicited commit on the user's main branch). v1.4.3
+  // retires the escape entirely — write-mode dispatch requires --task-spec,
+  // no exceptions. This test pins the closure.
   const repo = makeTempDir();
   const binDir = makeTempDir();
   installFakeCodex(binDir);
@@ -2166,14 +2188,13 @@ test("task --write --worktree=off bypasses the safety gate (documented escape)",
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
 
-  // --background just queues the job and exits; no real Codex turn happens
-  // here so the test stays cheap.
   const result = run(
     "node",
     [SCRIPT, "task", "--write", "--worktree=off", "--background", "--json", "just do something"],
     { cwd: repo, env: buildEnv(binDir) }
   );
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /"status":\s*"queued"/);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Write-mode dispatch requires a task spec/);
+  assert.match(result.stderr, /--worktree=off no longer bypasses/);
 });

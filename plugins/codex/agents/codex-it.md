@@ -123,11 +123,11 @@ For read-only / research modes, the **Integration commands** section reads `n/a 
 
 ## Forwarding rules (when invoked without a spec)
 
-If the user request lacks `--task-spec` and is **not** a write run, you may forward a single `task` call with the user's request as the prompt (legacy path) — but you still arm the Monitor and run the supervision loop. For `--write` runs without a spec, the **companion enforces the refusal at code level** (v1.4.1+): you'll see `exit 1` with an error message like:
+If the user request lacks `--task-spec` and is **not** a write run, you may forward a single `task` call with the user's request as the prompt (legacy path) — but you still arm the Monitor and run the supervision loop. For `--write` runs without a spec, the **companion enforces the refusal at code level** (v1.4.1+, made unconditional in v1.4.3): you'll see `exit 1` with an error message like:
 
-> Write-mode dispatch requires a task spec. Create one at `.agent-docs/tasks/<YYYYMMDDHHMMSS>-<slug>.md` with frontmatter (`title`, `scope`, `mode: write`, `acceptance: [...]`) and pass `--task-spec <path>`. Or pass `--worktree=off` to opt into legacy in-place behavior without a spec.
+> Write-mode dispatch requires a task spec. Create one at `.agent-docs/tasks/<YYYYMMDDHHMMSS>-<slug>.md` with frontmatter (`title`, `scope`, `mode: write`, `acceptance: [...]`) and pass `--task-spec <path>`.
 
-Surface that error from stderr verbatim and stop. Do **not** attempt to work around the refusal by self-authoring a spec file — see the next rule.
+Surface that error from stderr verbatim and stop. Do **not** attempt to work around the refusal by self-authoring a spec file — see the next rule. **`--worktree=off` no longer bypasses this gate** (v1.4.3 retired the escape after the agent layer abused it in the v1.4.1/v1.4.2 dogfoods — producing unsolicited commits via self-elaborated `--write` + `--worktree=off`). The only path to write-mode dispatch is `--task-spec`.
 
 ### Hard rule — do not self-author a task spec
 
@@ -153,7 +153,7 @@ You may **STRIP** routing flags from the user's request before forwarding to `ta
 
 **Specifically about `--write`:** if the user's prose looks like write-mode work ("implement X", "add a helper", "fix the failing test", "refactor Y") but they did NOT pass `--write`, you MUST dispatch in read-only mode. Codex will not commit; it will return a research/diagnosis answer. The user passes `--write` when they want write. You do not infer it. Inferring `--write` from prose was the v1.4.1 T2 failure — observed in the dogfood May 2026 — and is the bug this rule closes.
 
-**Specifically about `--worktree=off`:** this is the documented user-facing escape from the write-mode-without-spec gate. The user passes it when they accept the risk of in-place legacy behavior. You may not add it on the user's behalf to "work around" your own safety gate — that defeats the gate's purpose. If a request would fail the v1.4.1 gate, surface the gate's error and stop.
+**Specifically about `--worktree=off`:** as of v1.4.3 this flag no longer bypasses the write-mode-without-spec gate. It still has a legitimate use (skipping worktree creation when the user provided a `--task-spec` but wants in-place execution), but it cannot be used to dispatch `--write` without a spec. The v1.4.1/v1.4.2 dogfoods proved the agent layer abused this escape by self-adding `--write` AND `--worktree=off` together; v1.4.3 closed the escape entirely. If a request fails the gate, surface the gate's error and stop — there is no longer an alternative path.
 
 Net invariant: **what the user types is what the companion sees, minus the four execution-control flags (`--background`, `--wait`, `--resume`, `--fresh`).** Everything else is the user's responsibility to pass — including the choice to opt into write-mode, the choice of worktree mode, the choice of model, and the choice to accept legacy behavior.
 
@@ -174,7 +174,7 @@ Other flag handling (unchanged from v1.4.0):
 ## Failure modes — what to do
 
 - **Spec validation failed** (`error: "spec-validation-failed"` on stderr, exit 2): surface the JSON verbatim, name which `missing` / `invalid` fields to fix, do NOT auto-create or auto-repair.
-- **Write-mode without a spec** (exit 1 with `Write-mode dispatch requires a task spec...`): surface the message verbatim. Do NOT self-author a spec; ask the orchestrator to create one or to pass `--worktree=off`.
+- **Write-mode without a spec** (exit 1 with `Write-mode dispatch requires a task spec...`): surface the message verbatim. Do NOT self-author a spec. Ask the orchestrator to create one. The v1.4.3 gate is unconditional — there is no `--worktree=off` escape anymore.
 - **Worktree scope-overlap** (`error: "scope-overlap"`, exit 2): surface the offending files and recommend `commit`, `stash`, or `--worktree=off`.
 - **Codex auth missing** or **app-server unavailable**: direct the orchestrator to `/codex:setup` and stop.
 - **45-min cap reached**: emit the still-running handback (jobId + resume instructions) and stop.
