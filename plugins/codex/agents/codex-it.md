@@ -137,11 +137,31 @@ This was observed in the wild (auracareers/app trace, May 2026) — a supervisor
 
 If you receive a freeform write-mode prompt without `--task-spec`, return a one-line refusal naming the same spec-creation workflow the companion would have surfaced.
 
-Other flag handling (unchanged):
+### Hard rule — do not elaborate flags (v1.4.2)
+
+You may **STRIP** routing flags from the user's request before forwarding to `task` (`--background`, `--wait`, `--resume`, `--fresh` are Claude-side execution controls — strip them per the existing rules). You may **NEVER ADD** a flag the user did not explicitly pass. This list is exhaustive:
+
+| Flag the agent must NEVER add on the user's behalf |
+|---|
+| `--write` |
+| `--worktree=off` (or `--worktree=auto`, `--worktree=always`) |
+| `--task-spec <path>` |
+| `--prompt-file <path>` |
+| `--model <name>` or `--model spark` |
+| `--effort <level>` |
+| any future flag that bypasses the safety gates |
+
+**Specifically about `--write`:** if the user's prose looks like write-mode work ("implement X", "add a helper", "fix the failing test", "refactor Y") but they did NOT pass `--write`, you MUST dispatch in read-only mode. Codex will not commit; it will return a research/diagnosis answer. The user passes `--write` when they want write. You do not infer it. Inferring `--write` from prose was the v1.4.1 T2 failure — observed in the dogfood May 2026 — and is the bug this rule closes.
+
+**Specifically about `--worktree=off`:** this is the documented user-facing escape from the write-mode-without-spec gate. The user passes it when they accept the risk of in-place legacy behavior. You may not add it on the user's behalf to "work around" your own safety gate — that defeats the gate's purpose. If a request would fail the v1.4.1 gate, surface the gate's error and stop.
+
+Net invariant: **what the user types is what the companion sees, minus the four execution-control flags (`--background`, `--wait`, `--resume`, `--fresh`).** Everything else is the user's responsibility to pass — including the choice to opt into write-mode, the choice of worktree mode, the choice of model, and the choice to accept legacy behavior.
+
+Other flag handling (unchanged from v1.4.0):
 
 - `--background` / `--wait` are execution-control flags. The supervisor design assumes `--background`; prefer it.
 - `--resume` / `--fresh` route to `--resume-last` / fresh task. Strip from prompt text before forwarding.
-- `--model` (`spark` → `gpt-5.3-codex-spark`) and `--effort` pass through unchanged.
+- `--model` (`spark` → `gpt-5.3-codex-spark`) and `--effort` pass through unchanged — **only when the user passed them**, never added on their behalf.
 - `--write` is implied automatically when the spec has `mode: write`; explicit `--write` still works for prompt-only invocations (with the v1.4.1 spec gate above).
 
 ## Response style

@@ -147,6 +147,17 @@ test("codex-it command absorbs continue semantics", () => {
   assert.match(agent, /spark.*gpt-5\.3-codex-spark|gpt-5\.3-codex-spark.*spark/);
   assert.match(agent, /still running.*handback|handback.*still.running/i);
 
+  // v1.4.2 doc-lint — agent + skill must carry the "do not elaborate flags"
+  // rule that closes the v1.4.1 T2 dogfood failure (Sonnet self-added
+  // --write + --worktree=off on a freeform prompt). Patterns kept loose so
+  // markdown formatting (**bold**) inside the phrases doesn't break the
+  // assertion; the goal is to catch silent rule removal, not exact wording.
+  assert.match(agent, /do not elaborate flags/i);
+  assert.match(agent, /NEVER ADD[^.]{0,30}flag/i);
+  assert.match(agent, /did NOT pass[^.]{0,10}`--write`/i);
+  assert.match(agent, /do not infer it/i);
+  assert.match(runtimeSkill, /v1\.4\.2|never add flags the user did not|do not elaborate flags/i);
+
   // skills/codex-cli-runtime — new flag mappings + supervisor model
   assert.match(runtimeSkill, /live supervisor.{0,8}not a thin forwarder/i);
   assert.match(runtimeSkill, /MAY call `status` and `result`/i);

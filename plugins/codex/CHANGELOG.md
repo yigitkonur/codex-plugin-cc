@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.4.2 — agent must not elaborate flags
+
+Closes a new bypass route the v1.4.1 dogfood (T2) exposed: when handed a
+freeform write-mode-feeling prompt (e.g. "implement a simple LRU cache utility
+for the codebase"), the agent **added `--write` AND `--worktree=off`** itself
+on the user's behalf, walking through the v1.4.1 code gate via the documented
+escape hatch and producing a real commit (`2847c59`, observed in saas-zeoradar
+during the dogfood) directly on the user's working branch — same end state as
+the v1.4.0 auracareers self-authored-spec bug, just through a different
+bypass.
+
+**Pattern.** v1.4.0/v1.4.1 closed two bypass routes (dispatching anyway;
+self-authoring a spec file). The v1.4.1 T2 dogfood found a third: the agent
+self-elaborating flags it knew would bypass the gate. Each prompt rule closes
+one path; Sonnet finds the next.
+
+**v1.4.2 fix.** New hard rule in `agents/codex-it.md`:
+
+> You may STRIP routing flags from the user's request before forwarding
+> (`--background`, `--wait`, `--resume`, `--fresh` are Claude-side execution
+> controls). You may NEVER ADD a flag the user did not explicitly pass.
+> Specifically about `--write`: if the user's prose looks like write-mode
+> work but they did NOT pass `--write`, dispatch in read-only mode. The
+> user passes `--write` when they want write. You do not infer it.
+> Specifically about `--worktree=off`: this is the user-facing escape, not a
+> mechanism for the agent to bypass its own safety gate.
+
+The exhaustive deny-add list in the prompt covers `--write`, `--worktree=*`,
+`--task-spec`, `--prompt-file`, `--model`, `--effort`, and any future flag
+that bypasses safety gates.
+
+**Code-level fix not needed.** The v1.4.1 companion gate is correct (T1 of
+the v1.4.1 dogfood proved it fires cleanly when `--write` is legitimately
+passed without a spec). The bug is purely the agent self-elaborating; the
+fix lives at the prompt layer with a documentation lint in
+`tests/commands.test.mjs` to prevent silent rule removal in future edits.
+
+**SKILL.md** in `codex-cli-runtime` updated with the same rule for the
+internal contract.
+
+**Behavior matrix after v1.4.2:**
+
+| Invocation                                       | Effect                                          |
+|--------------------------------------------------|--------------------------------------------------|
+| `/codex:it implement an LRU cache`               | dispatched read-only (NOT --write) — research output |
+| `/codex:it --write implement an LRU cache`       | refused (v1.4.1 gate fires — no spec)          |
+| `/codex:it --write --worktree=off implement ...` | dispatched in-place (user explicitly accepted) |
+| `/codex:it --task-spec <path>`                   | dispatched normally                            |
+
+**Tests.** One new documentation-lint assertion in `tests/commands.test.mjs`
+verifying the "do not elaborate flags" rule is present in `agents/codex-it.md`
+and in `codex-cli-runtime/SKILL.md`. Runtime tests unchanged at 119 / 118 / 1.
+
+**Empirical grounding.** The v1.4.1 T2 dogfood and the resulting unsolicited
+`2847c59` commit are cited inline in the prompt rule so future maintainers
+understand why the rule exists.
+
 ## 1.4.1 — write-mode safety gate
 
 Single-purpose patch addressing one empirical bug discovered immediately after
